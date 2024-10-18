@@ -14,11 +14,13 @@ import jaxopt
 from jaxtorch import nn
 from jaxtorch import PRNG, Context
 
+from ngp.log_h import log_h
+
 if __name__ == '__main__':
     in_dim = 1
 
     def true_f(x):
-        return jnp.sin(x) + jnp.cos(2*x)#.squeeze(-1)
+        return 2-(x-1)**2 #jnp.sin(x) + jnp.cos(2*x)#.squeeze(-1)
 
     x = jnp.array([[1.0],[2.0], [-1.0]])
     y = true_f(x) #jnp.array([0.5,0.0, 0.4, 0.5]).unsqueeze(-1)
@@ -55,8 +57,6 @@ if __name__ == '__main__':
     def v_fwd(params, x):
         cx = Context(params, None)
         return model(cx, x)
-    
-    from log_h import log_h
 
     def prob_improve(waterline, mean, std, eps=0.01):
         # return 1/2 * (1 + jax.lax.erf((mean - waterline)/(jnp.sqrt(2) * std+eps)))
@@ -133,7 +133,7 @@ if __name__ == '__main__':
         xs = jnp.linspace(-5, 5, 100)[:, None]
         pred = acquisition(params, xs, jnp.max(y))
         preg = jax.vmap(jax.grad(lambda xs: acquisition(params, xs, jnp.max(y))))(xs)
-        plt.plot(xs, jnp.exp(pred), label='acquisition')
+        plt.plot(xs, pred, label='acquisition')
         # plt.plot(xs, preg, label='acquisition (gradient)')
 
         xmax, metrics = findmax(jax.random.PRNGKey(1), params, jnp.max(y))
