@@ -115,24 +115,10 @@ delta_max = 1000.0
 @partial(jax.jit, static_argnums=(3,4,8,10))
 def build_tree_fwd(key: jax.Array, theta: jax.Array, r: jax.Array, logp: callable, logp_grad: callable, 
                    H0: jax.Array, u0: jax.Array, v: jax.Array, j: int, ε: jax.Array, return_log=False):
-    """Recursively build tree"""
-    rng = PRNG(key)
-    stack = jnp.zeros((j+1, 2, *theta.shape))
+    def step_fn(carry, i):
+        key, theta, r, result, n, s, stack, (count_slice_fail, count_energy_fail, count_uturn_fail) = carry
+        key, subkey = jax.random.split(key)
 
-    result = theta
-
-    n = 0
-    s = 1
-
-    r = v*r
-
-    count_slice_fail = 0
-    count_energy_fail = 0
-    count_uturn_fail = 0
-
-    log = []
-
-    for i in range(2**j):
         theta, r = leapfrog(theta, r, logp_grad, +ε)
         H = compute_hamiltonian(theta, r, logp)
         n_prime = jnp.log(u0) <= H0 - H
@@ -143,13 +129,13 @@ def build_tree_fwd(key: jax.Array, theta: jax.Array, r: jax.Array, logp: callabl
         count_slice_fail += n_prime == 0
         count_energy_fail += s_prime == 0
 
-        select = jax.random.bernoulli(rng.split(), n_prime / jnp.clip(n,1))
+        select = jax.random.bernoulli(subkey, n_prime / jnp.clip(n,1))
         result = jnp.where(select, theta, result)
 
         theta_m, r_m, theta_p, r_p = theta, r, theta, r
 
-        if j > 0:
-            ks = jnp.arange(j+1)
+        if True: #j > 0:
+            ks = jnp.arange(j)
             subtree_start = (i % (2**(ks+1)) == 0)
             stack = jnp.where(broadcast_right(subtree_start, stack.shape), jnp.stack([theta_m, r_m]), stack)
 
@@ -174,13 +160,22 @@ def build_tree_fwd(key: jax.Array, theta: jax.Array, r: jax.Array, logp: callabl
             #         count_uturn_fail += nou == 0
             #     else:
             #         break
-
-        if return_log:
-            log.append((theta, r))
-        # if not s:
-        #     break
+        carry = (key, theta, r, result, n, s, stack, (count_slice_fail, count_energy_fail, count_uturn_fail))
+        return carry, None
     
-    metrics = {'count_slice_fail':count_slice_fail, 'count_energy_fail':count_energy_fail, 'count_uturn_fail':count_uturn_fail, 'log':log}
+    stack = jnp.zeros((j, 2, *theta.shape))
+    result = theta
+    n = 0
+    s = jnp.array(True)
+    r = v*r
+    count_slice_fail = 0
+    count_energy_fail = 0
+    count_uturn_fail = 0
+    carry = (key, theta, r, result, n, s, stack, (count_slice_fail, count_energy_fail, count_uturn_fail))
+    carry, _ = jax.lax.scan(step_fn, carry, jnp.arange(2**j))
+    (key, theta, r, result, n, s, stack, (count_slice_fail, count_energy_fail, count_uturn_fail)) = carry
+
+    metrics = {'count_slice_fail':count_slice_fail, 'count_energy_fail':count_energy_fail, 'count_uturn_fail':count_uturn_fail}
 
     return theta, v*r, result, n, s, metrics
 
