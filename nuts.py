@@ -3,6 +3,8 @@ import jax.numpy as jnp
 from tqdm import tqdm
 from typing import Tuple
 from functools import partial
+from dataclasses import dataclass
+from jax_tqdm import scan_tqdm
 
 
 def leapfrog(theta: jax.Array, r: jax.Array, logp_grad, eps: jax.Array) -> Tuple[jax.Array, jax.Array]:
@@ -26,47 +28,53 @@ def rademacher_int(key, shape):
     # returns -1 or 1
     return jax.random.bernoulli(key, 0.5, shape) * 2 - 1
 
+MAX_J=10
+@partial(jax.jit, static_argnums=(2,3))
 def nuts_kernel(key, theta, logp, logp_grad, ε):
     key, *subkeys = jax.random.split(key, 3)
     r0 = jax.random.normal(subkeys[0], theta.shape)
     H0 = compute_hamiltonian(theta, r0, logp)
     u0 = jax.random.uniform(subkeys[1], []) # u = u0 * exp(-H0)
-    theta_minus = theta
-    theta_plus = theta
-    r_minus = r0
-    r_plus = r0
+    theta_m = theta
+    theta_p = theta
+    r_m = r0
+    r_p = r0
     j = 0
     theta_new = theta
     n = 1
-    s = 1
-    while s:
+    s = jnp.array(True)
+
+    state = (key, theta_m, theta_p, r_m, r_p, j, theta_new, n, s, 0.0)
+
+    def cond_fn(state):
+        (key, theta_m, theta_p, r_m, r_p, j, theta_new, n, s, alpha) = state
+        return jnp.logical_and(s, j<=MAX_J)
+
+    def body_fn(state):
+        (key, theta_m, theta_p, r_m, r_p, j, theta_new, n, s, alpha) = state
         key, *subkeys = jax.random.split(key, 4)
+        
         v = rademacher_int(subkeys[0], [])
-        if v == -1:
-            # theta_minus, r_minus, _, _, theta_prime, n_prime, s_prime = build_tree(subkeys[1], theta_minus, r_minus, logp, logp_grad, H0, u0, v, j, ε)
-            theta_minus, r_minus, theta_prime, n_prime, s_prime, metrics = build_tree_fwd(subkeys[1], theta_minus, r_minus, logp, logp_grad, H0, u0, v, j, ε)
-        else:
-            theta_plus, r_plus, theta_prime, n_prime, s_prime, metrics = build_tree_fwd(subkeys[1], theta_plus, r_plus, logp, logp_grad, H0, u0, v, j, ε)
-        if s_prime:
-            if jax.random.bernoulli(subkeys[2], jnp.minimum(1, n_prime / n)):
-                theta_new = theta_prime
+        theta_n, r_n, theta_prime, n_prime, s_prime, alpha, metrics = build_tree_fwd(
+            subkeys[1], jnp.where(v==1, theta_p, theta_m), jnp.where(v==1, r_p, r_m), logp, logp_grad, H0, u0, v, MAX_J, j, ε)
+        theta_p = jnp.where(v==1, theta_n, theta_p)
+        r_p = jnp.where(v==1, r_n, r_p)
+        theta_m = jnp.where(v==-1, theta_n, theta_m)
+        r_m = jnp.where(v==-1, r_n, r_m)
+
+        theta_new = jnp.where(jnp.logical_and(s_prime, jax.random.bernoulli(subkeys[2], jnp.minimum(1, n_prime / n))),
+                              theta_prime, theta_new)
         n += n_prime
-        s = jnp.logical_and(s_prime, no_uturn(theta_minus, theta_plus, r_minus, r_plus))
+        s = jnp.logical_and(s_prime, no_uturn(theta_m, theta_p, r_m, r_p))
         j += 1
-    # if metrics['count_uturn_fail'] > 0:
-    #     print('count_uturn_fail', metrics['count_uturn_fail'])
-    #     print('count_slice_fail', metrics['count_slice_fail'])
-    #     print('count_energy_fail', metrics['count_energy_fail'])
-    #     print('log', metrics['log'])
-    #     # plot the points in the log with the velocity direction as arrows
-    #     log_thetas, log_rs = zip(*metrics['log'])
-    #     log_thetas = jnp.stack(log_thetas)
-    #     log_rs = jnp.stack(log_rs)
-    #     plt.scatter(log_thetas[:,0], log_thetas[:,1], color='blue')
-    #     plt.quiver(log_thetas[:,0], log_thetas[:,1], log_rs[:,0], log_rs[:,1], color='red', angles='xy')
-    #     plt.show()
-    #     exit()
-    return theta_new
+        return (key, theta_m, theta_p, r_m, r_p, j, theta_new, n, s, alpha)
+
+    state = jax.lax.while_loop(cond_fn, body_fn, state)
+    (key, theta_m, theta_p, r_m, r_p, j, theta_new, n, s, alpha) = state
+
+    metrics = {}
+    metrics['j'] = j-1
+    return theta_new, alpha, metrics
 
 def build_tree(key, theta, r, logp, logp_grad, H0, u0, v, j, ε):
     """Recursively build tree"""
@@ -112,15 +120,32 @@ def broadcast_right(x, shape):
     return x
 
 delta_max = 1000.0
-@partial(jax.jit, static_argnums=(3,4,8,10))
+@partial(jax.jit, static_argnums=(3,4,8))
 def build_tree_fwd(key: jax.Array, theta: jax.Array, r: jax.Array, logp: callable, logp_grad: callable, 
-                   H0: jax.Array, u0: jax.Array, v: jax.Array, j: int, ε: jax.Array, return_log=False):
-    def step_fn(carry, i):
-        key, theta, r, result, n, s, stack, (count_slice_fail, count_energy_fail, count_uturn_fail) = carry
+                   H0: jax.Array, u0: jax.Array, v: jax.Array, max_j: int, j: jax.Array, ε: jax.Array): 
+    """Sequential implementation of build_tree.
+
+    To make this work without recursion, we use a "stack" (really just an array) to keep track of all current subtrees.
+    When we start a subtree at any level, we set the start point of that level to the current point.
+    When we end a subtree, we check the u turn condition wrt the beginning and end (ie. the current point) of the subtree.
+    This can be fully vectorized, removing all data dependent control flow.
+
+    It is probably possible to do early stopping (stop the loop when s=0) with a jax.lax.while_loop, but this is difficult to support with vmap.
+    """
+
+    def step_fn(i, carry):
+        key, theta, r, result, n, s, stack, alpha_sum, (count_slice_fail, count_energy_fail, count_uturn_fail) = carry
         key, subkey = jax.random.split(key)
 
+        # Leapfrog step
         theta, r = leapfrog(theta, r, logp_grad, +ε)
         H = compute_hamiltonian(theta, r, logp)
+
+        # Step size adaptation statistic
+        # logp(θ,r) = exp(-H)
+        alpha_sum += jnp.exp(jnp.clip(H0 - H, max=0.0))
+
+        # Check slice sampling and energy condition
         n_prime = jnp.log(u0) <= H0 - H
         s_prime = jnp.log(u0) <= H0 - H + delta_max
         n = n_prime + n
@@ -129,41 +154,27 @@ def build_tree_fwd(key: jax.Array, theta: jax.Array, r: jax.Array, logp: callabl
         count_slice_fail += n_prime == 0
         count_energy_fail += s_prime == 0
 
+        # If the new point passes slice sampling, accept it with p=1/n (ensures uniform sampling from all valid points)
         select = jax.random.bernoulli(subkey, n_prime / jnp.clip(n,1))
         result = jnp.where(select, theta, result)
 
-        theta_m, r_m, theta_p, r_p = theta, r, theta, r
+        # === Check u turn condition for all subtrees ===
+        ks = jnp.arange(max_j)
 
-        if True: #j > 0:
-            ks = jnp.arange(j)
-            subtree_start = (i % (2**(ks+1)) == 0)
-            stack = jnp.where(broadcast_right(subtree_start, stack.shape), jnp.stack([theta_m, r_m]), stack)
+        subtree_start = jnp.logical_and(i % (2**(ks+1)) == 0, ks<j)
+        stack = jnp.where(broadcast_right(subtree_start, stack.shape), jnp.stack([theta, r]), stack)
 
-            # for k in range(j):
-            #     if i % (2**(k+1)) == 0:
-            #         # starts the subtree at this level
-            #         stack = stack.at[k].set(jnp.stack([theta_m, r_m]))
+        subtree_end = jnp.logical_and((i+1) % (2**(ks+1)) == 0, ks<j)
+        nou = no_uturn(stack[:,0], theta, stack[:,1], r)
+        nou = jnp.where(broadcast_right(subtree_end, nou.shape), nou, 1)
+        nou = jnp.all(nou)
+        s = jnp.logical_and(s, nou)
+        count_uturn_fail += nou == 0
+        # === End of u turn condition ===
 
-            subtree_end = (i+1) % (2**(ks+1)) == 0
-            nou = no_uturn(stack[:,0], theta_p, stack[:,1], r_p)
-            nou = jnp.where(broadcast_right(subtree_end, nou.shape), nou, 1)
-            nou = jnp.all(nou)
-            s = jnp.logical_and(s, nou)
-            count_uturn_fail += nou == 0
-
-            # for k in range(j):
-            #     if (i+1) % (2**(k+1)) == 0:
-            #         # completed the subtree, combine two parts and check u turn
-            #         theta_m, r_m = stack[k]
-            #         nou = no_uturn(theta_m, theta_p, r_m, r_p)
-            #         s = jnp.logical_and(s, nou)
-            #         count_uturn_fail += nou == 0
-            #     else:
-            #         break
-        carry = (key, theta, r, result, n, s, stack, (count_slice_fail, count_energy_fail, count_uturn_fail))
-        return carry, None
+        return (key, theta, r, result, n, s, stack, alpha_sum, (count_slice_fail, count_energy_fail, count_uturn_fail))
     
-    stack = jnp.zeros((j, 2, *theta.shape))
+    stack = jnp.zeros((max_j, 2, *theta.shape))
     result = theta
     n = 0
     s = jnp.array(True)
@@ -171,13 +182,14 @@ def build_tree_fwd(key: jax.Array, theta: jax.Array, r: jax.Array, logp: callabl
     count_slice_fail = 0
     count_energy_fail = 0
     count_uturn_fail = 0
-    carry = (key, theta, r, result, n, s, stack, (count_slice_fail, count_energy_fail, count_uturn_fail))
-    carry, _ = jax.lax.scan(step_fn, carry, jnp.arange(2**j))
-    (key, theta, r, result, n, s, stack, (count_slice_fail, count_energy_fail, count_uturn_fail)) = carry
+    alpha_sum = 0.0
+    carry = (key, theta, r, result, n, s, stack, alpha_sum, (count_slice_fail, count_energy_fail, count_uturn_fail))
+    carry = jax.lax.fori_loop(0, 2**j, step_fn, carry)
+    (key, theta, r, result, n, s, stack, alpha_sum, (count_slice_fail, count_energy_fail, count_uturn_fail)) = carry
 
     metrics = {'count_slice_fail':count_slice_fail, 'count_energy_fail':count_energy_fail, 'count_uturn_fail':count_uturn_fail}
 
-    return theta, v*r, result, n, s, metrics
+    return theta, v*r, result, n, s, alpha_sum/(2**j), metrics
 
 
 if __name__ == '__main__':
@@ -194,13 +206,37 @@ if __name__ == '__main__':
     theta = jax.random.normal(rng.split(), [2])
     r = jax.random.normal(rng.split(), [2])
 
-    samples = []
-    for _ in tqdm(range(1000)):
-        theta = nuts_kernel(rng.split(), theta, logp, logp_grad, 0.05)
-        samples.append(theta)
+    def k_nuts(key, theta, ε):
+        return nuts_kernel(key, theta, logp, logp_grad, 1.0)
+
+    # print(jax.jit(jax.vmap(k_nuts, in_axes=(0,0,None))).lower(rng.split(3), jax.random.normal(rng.split(), [3,2]), 1.0).as_text())
+    # exit()
+
+    @jax.jit
+    def sample(key, theta, ε):
+        @scan_tqdm(30000)
+        def body_fn(carry, i):
+            key, theta = carry
+            key, subkey = jax.random.split(key)
+            theta, alpha, metrics = nuts_kernel(subkey, theta, logp, logp_grad, ε)
+            return (key, theta), (theta, alpha, metrics)
+        return jax.lax.scan(body_fn, (key, theta), jnp.arange(30000))[1]
+
+
+    # samples = []
+    # alphas = []
+    # for _ in tqdm(range(30000)):
+    #     theta, alpha, metrics = nuts_kernel(rng.split(), theta, logp, logp_grad, 1.0)
+    #     samples.append(theta)
+    #     alphas.append(alpha)
+    samples, alphas, metrics = sample(rng.split(), theta, 1.0)
     samples = jnp.stack(samples)
+    alphas = jnp.stack(alphas)
+    print(samples.shape)
+    # print(metrics)
     # print(einops.rearrange(samples, '(x n) d -> x n d', x=20).std(1))
     print(samples.std(0), jax.random.normal(rng.split(),samples.shape).std(0))
+    print(alphas.mean())
     # scatter plot
     plt.scatter(samples[:,0], samples[:,1])
     plt.plot(samples[:,0], samples[:,1], color='red', alpha=0.1)
