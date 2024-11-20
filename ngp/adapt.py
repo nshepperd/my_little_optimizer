@@ -17,7 +17,9 @@ def find_reasonable_epsilon(key, theta, logp, target=0.5, max_steps=50):
     ε = 1.0
     theta_new, r_new = leapfrog(theta, r, logp_grad, ε)
     def calc_a(theta_new, r_new):
-        return 2 * (H0 - compute_hamiltonian(theta_new, r_new, logp) > jnp.log(target)) - 1
+        H = compute_hamiltonian(theta_new, r_new, logp)
+        H = jnp.where(jnp.isnan(H), -jnp.inf, H)
+        return 2 * (H0 - H > jnp.log(target)) - 1
     a = calc_a(theta_new, r_new)
 
     init_state = (theta_new, r_new, ε)
