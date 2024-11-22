@@ -89,6 +89,9 @@ def broadcast_right(x, shape):
         x = x[...,None]
     return x
 
+def finiteor(x, y):
+    return jnp.where(jnp.isfinite(x), x, y)
+
 delta_max = 1000.0
 @partial(jax.jit, static_argnums=(3,4,8))
 def build_tree_fwd(key: jax.Array, theta: jax.Array, r: jax.Array, logp: callable, logp_grad: callable, 
@@ -112,7 +115,6 @@ def build_tree_fwd(key: jax.Array, theta: jax.Array, r: jax.Array, logp: callabl
         # Leapfrog step
         theta, r = leapfrog(theta, r, logp_grad, +ε)
         H = compute_hamiltonian(theta, r, logp)
-        H = jnp.where(jnp.isnan(H), -jnp.inf, H)
 
         # Step size adaptation statistic
         # logp(θ,r) = exp(-H)
@@ -120,8 +122,7 @@ def build_tree_fwd(key: jax.Array, theta: jax.Array, r: jax.Array, logp: callabl
         # jax.debug.print('aaa alpha: {} sum={} H0={} H={}', jnp.exp(jnp.clip(H0 - H, max=0.0)), alpha_sum, H0, H)
 
         # Check slice sampling and energy condition
-        # n_prime = jnp.log(u0) <= H0 - H
-        n_prime = u0 * jnp.exp(-H0) <= jnp.exp(-H)
+        n_prime = jnp.log(u0) <= H0 - H
         s_prime = jnp.log(u0) <= H0 - H + delta_max
         n = n_prime + n
         s = jnp.logical_and(s_prime, s)
