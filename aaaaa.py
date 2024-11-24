@@ -7,12 +7,20 @@ from dataclasses import dataclass
 from jax_tqdm import scan_tqdm
 import einops
 import json
+import jax.scipy as jsp
 
 from ngp.gaussian_process import GP
 
 stuff = json.load(open('stuff.json', 'r'))
 xs = jnp.array(stuff['xs'])
-rs = jnp.array(stuff['rs'])
+ds = jnp.array(stuff['ds'])
+alphas = jnp.array(stuff['αs'])
+
+print(xs, ds)
+print('Maximum of ds:', jnp.max(ds))
+
+rs = ds
+
 
 # vals = dict()
 # for (γ, r) in zip(xs, rs):
@@ -25,19 +33,31 @@ rs = jnp.array(stuff['rs'])
 
 # print(xs, rs)
 
-def kernel(x, y):
-    σ = 0.2
-    return jnp.exp(-0.5 * jnp.sum(jnp.square(x-y)/σ**2))
-gp = GP(kernel, 0.1)
+def normalcdf(x, mean, var):
+    return 0.5 * jsp.special.erfc((mean - x)/(jnp.sqrt(2 * var)))
+
+def matern52(x, y, σ=0.1):
+    d = jnp.sqrt(jnp.sum(jnp.square(x-y)))
+    return (1 + jnp.sqrt(5)*d/σ + 5/3 * d**2/σ**2) * jnp.exp(-jnp.sqrt(5)*d/σ)
+gp = GP(matern52, 0.5)
+gp_alpha = GP(partial(matern52, σ=0.2), 0.2)
 
 array_ε = jnp.linspace(0.0, 1.0, 100)
 array_L = jnp.linspace(0.0, 1.0, 100)
 array_γ = einops.rearrange(jnp.stack(jnp.meshgrid(array_ε, array_L), axis=-1),
                             'a b c -> (a b) c')
 
-prec = gp.calc_precision(jnp.stack(xs))
-print(xs.shape, prec.shape)
-mean, var = gp.predictb(xs, rs, prec, array_γ)
+ts = jnp.linspace(0,1, xs.shape[0])
+array_γα = einops.rearrange(jnp.stack(jnp.meshgrid(array_ε, jnp.linspace(0,1, 100)), axis=-1),
+                            'a b c -> (a b) c')
+
+alpha_pred = gp_alpha.predictb(jnp.stack([xs[:,0], ts],axis=-1), 
+                               alphas, 
+                               array_γα)
+p_middle = normalcdf(0.95, alpha_pred[0], alpha_pred[1]) - normalcdf(0.05, alpha_pred[0], alpha_pred[1])
+
+# jnp.stack([xs[:,0], jnp.linspace(0,1, xs.shape[0])],axis=-1)
+mean, var = gp.predictb(xs, rs, array_γ)
 u = mean - 2*jnp.sqrt(var)
 γ = array_γ[jnp.argmax(u)]
 
@@ -48,7 +68,7 @@ mean_2d = einops.rearrange(mean, '(a b) -> a b', a=100, b=100)
 var_2d = einops.rearrange(var, '(a b) -> a b', a=100, b=100)
 
 # Create figure with two subplots - mean and variance
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(12, 5))
 
 # Plot mean
 im1 = ax1.imshow(mean_2d, origin='lower', extent=[0, 1, 0, 1])
@@ -73,6 +93,12 @@ ax2.scatter(xs_array[:, 0], xs_array[:, 1], c='red', s=20, label='Observations')
 ax1.scatter(γ[None, 0], γ[None, 1], c='blue', s=20, label='Argmax')
 ax2.scatter(γ[None, 0], γ[None, 1], c='blue', s=20, label='Argmax')
 
+im3 = ax3.imshow(einops.rearrange(p_middle, '(a b) -> a b', a=100, b=100), origin='lower', extent=[0, 1, 0, 1])
+ax3.scatter(xs_array[:, 0], ts, c='red', s=20, label='Observations')
+plt.colorbar(im3, ax=ax3)
+
+
+# ax3.plot(ds)
 
 plt.tight_layout()
 plt.show()

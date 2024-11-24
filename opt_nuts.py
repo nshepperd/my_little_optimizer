@@ -11,6 +11,7 @@ from functools import partial
 from jax.tree_util import tree_map
 from dataclasses import dataclass
 import eindex.array_api as EX
+import einops
 
 from jaxtorch import nn
 from jaxtorch import PRNG, Context
@@ -21,7 +22,7 @@ from ngp.metric import DictionaryMetric, ScalarMetric
 from ngp.metric import DictionaryMetricEstimator, CovarianceMetricEstimator, KroneckerMetricEstimator
 from ngp.nuts import nuts_kernel
 from ngp.adapt import warmup_with_dual_averaging, find_reasonable_epsilon
-import hmc
+from ngp.ahmc import ahmc_fast, sample_hmc
 
 import optuna
 
@@ -80,11 +81,9 @@ if __name__ == '__main__':
     print(' y:', y.shape)
 
     y = jnp.where(jnp.isfinite(y), y, jnp.max(y[jnp.isfinite(y)]))
-
-    model = nn.Sequential([nn.Linear(in_dim, 10), nn.SiLU(), nn.Linear(10, 10), nn.SiLU(), nn.Linear(10, out_dim)])
+    model = nn.Sequential([nn.Linear(in_dim, 20), nn.SiLU(), nn.Linear(20, 20), nn.SiLU(), nn.Linear(20, out_dim)])
     model.name_everything_()
 
-    n_steps = 1000
     aq_steps = 100
 
     def mkscales(model):
@@ -113,9 +112,8 @@ if __name__ == '__main__':
     scales = mkscales(model)
     metric0 = mkmetric(model)
     estimator = mkmetric_estimator(model)
-    σ_y = 0.03
 
-    def f_loss(metric, x, y, eps):
+    def f_loss(metric, x, y, eps, σ_y=0.1):
         params = metric.unwhiten(eps)
         cx = Context(params, None)
         prediction = model(cx, x)
@@ -162,44 +160,32 @@ if __name__ == '__main__':
 
         @jax.jit
         def sample(self, key: jax.Array, x: jax.Array, y: jax.Array):
-            rng = PRNG(key)
-            params = model.init_weights(rng.split())
-            
+            keys = jax.random.split(key,10)
+            params = model.init_weights(keys[0])
+
             eps = metric0.whiten(params)
-            ε, εp = self.find_reasonable_epsilon(rng.split(), eps, metric0, x, y)
+            ε, εp = find_reasonable_epsilon(keys[9], eps, partial(f_loss, metric0, x, y))
             jax.debug.print('Found step size {} with acceptance probability {}', ε, εp)
-            eps, _, _ = self.warmup_with_dual_averaging(rng.split(), eps, metric0, x, y, ε, warmup_steps=25)
-            eps, _, _ = self.warmup_with_dual_averaging(rng.split(), eps, metric0, x, y, ε, warmup_steps=50)
-            eps, ε, _ = self.warmup_with_dual_averaging(rng.split(), eps, metric0, x, y, ε, warmup_steps=100)
-            chain, accept_prob, ms = self.nuts_sample(rng.split(), eps, metric0, x, y, 25, ε)
-            jax.debug.print('Finished first adaptation interval - accept_prob = {}', accept_prob.mean())
+            # eps, ε, metrics = warmup_with_dual_averaging(keys[2], eps, partial(f_loss, metric0), ε)
+            # jax.debug.print('Warmup finished with step size {} and log probs {}', ε, metrics['probs'])
+            (eps, ε, L, info1) = ahmc_fast(keys[1], eps, partial(f_loss, metric0, x, y), 100, εmin=ε/100, εmax=ε*100, Lmin = 2, Lmax = 2000)
+            jax.debug.print('Warmup finished with ε={} and L={}, d={}, logp={}', ε, L, info1['d'].mean(), info1['logp'][-1])
+            # chain, accept_prob, ms = nuts_sample(keys[3], eps, partial(f_loss, metric0), 25, ε)
+            eps, chain, ms = sample_hmc(keys[2], eps, partial(f_loss, metric0, x, y), 1000, ε, L)
+            jax.debug.print('Finished first adaptation interval - accept_prob = {}', ms['alpha'].mean())
+            params = metric0.unwhiten(eps)
             pchain = jax.vmap(metric0.unwhiten)(chain)
-            params = jax.tree_util.tree_map(lambda x:x[-1], pchain)
             metric = estimator(pchain)
+            echain = jax.vmap(metric.whiten)(pchain)
             eps = metric.whiten(params)
-            # eps, ε, metrics = self.warmup_with_dual_averaging(rng.split(), eps, metric, x, y, ε, warmup_steps=25)
-            chain, accept_prob, ms = self.nuts_sample(rng.split(), eps, metric, x, y, 50, ε)
-            jax.debug.print('Finished second adaptation interval - accept_prob = {}', accept_prob.mean())
-            pchain = jax.vmap(metric.unwhiten)(chain)
-            params = jax.tree_util.tree_map(lambda x:x[-1], pchain)
-            metric = estimator(pchain)
-            eps = metric.whiten(params)
-            # eps, ε, metrics = self.warmup_with_dual_averaging(rng.split(), eps, metric, x, y, ε, warmup_steps=25)
-            chain, accept_prob, ms = self.nuts_sample(rng.split(), eps, metric, x, y, 100, ε)
-            jax.debug.print('Finished third adaptation interval - accept_prob = {}', accept_prob.mean())
-            pchain = jax.vmap(metric.unwhiten)(chain)
-            params = jax.tree_util.tree_map(lambda x:x[-1], pchain)
-            metric = estimator(pchain)
-            eps = metric.whiten(params)
+            (eps, ε, L, info2) = ahmc_fast(keys[3], eps, partial(f_loss, metric, x, y), 100, εmin=1e-4, εmax=1.0, Lmin = 2, Lmax = 2000)
+            jax.debug.print('Warmup finished with ε={} and L={}, d={}, logp={}', ε, L, info2['d'].mean(), info2['logp'][-1])
+            eps, chain, ms = sample_hmc(keys[8], eps, partial(f_loss, metric, x, y), self.n_steps, ε, L)
 
-            eps, ε, metrics = self.warmup_with_dual_averaging(rng.split(), eps, metric, x, y, ε, warmup_steps=100)
-
-            chain, accept_prob, ms = self.nuts_sample(rng.split(), eps, metric, x, y, self.n_steps, ε)
-            # chain, accept_prob = hmc.sample(key2, eps_init, f_loss, n_steps=self.n_steps, n_leapfrog_steps=self.n_leapfrog_steps, step_size=self.step_size)
-
+            chain = einops.rearrange(chain, '(x n) ... -> x n ...', x=10)[-1]
             probs = jax.vmap(partial(f_loss, metric, x, y))(chain)
             chain = jax.vmap(metric.unwhiten)(chain)
-            return chain, accept_prob, {'probs':probs}
+            return chain, ms['alpha'], {'probs':probs, 'info1':info1, 'info2':info2}, echain
 
     @jax.jit
     @partial(jax.vmap, in_axes=(0,None))
@@ -285,7 +271,7 @@ if __name__ == '__main__':
         (x, _, _), metrics = jax.lax.scan(step, (x, opt_state, key), jnp.arange(findmin_steps))
         return x, metrics
 
-    def gelman_rubin(statistics):
+    def gelman_rubin(query_ys):
         J = query_ys.shape[0]
         L = query_ys.shape[1]
         xj = jnp.mean(query_ys, axis=1) # c x ..
@@ -297,16 +283,35 @@ if __name__ == '__main__':
 
     for i in range(1):
         rng = PRNG(jax.random.PRNGKey(0))
-        mcmc = MCMC(n_steps=1000, n_chains=4)
+        mcmc = MCMC(n_steps=2000, n_chains=4)
 
-        chains, accept_probs, ms = jax.vmap(mcmc.sample, in_axes=(0,None,None))(rng.split(4), x, y)
+        # params = model.init_weights(rng.split())
+        # eps = metric0.whiten(params)
+        # ε, εp = find_reasonable_epsilon(rng.split(), eps, partial(f_loss, metric0, x, y))
+        # jax.debug.print('Found step size {} with acceptance probability {}', ε, εp)
+        # (eps, ε, L, info) = ahmc_fast(rng.split(), eps, partial(f_loss, metric0, x, y), 100, εmin=1e-8, εmax=1.0, Lmin = 2, Lmax = 1000)
+        # # (eps, ε, L, info) = ahmc_fast(rng.split(), eps, partial(f_loss, metric0, x, y), 1000, εmin=1e-4, εmax=1.0, Lmin = 2, Lmax = 100)
+        # print(f'Found ε={ε}, L={L}, d={info["d"].mean()}, logp={info["logp"][-1]}')
+        # import json
+        # with open('stuff.json', 'w') as fp:
+        #     json.dump({'xs': info['γ'].tolist(), 'ds': info['d'].tolist(), 'αs': info['α'].tolist()}, fp)
+        # exit()
+
+        chains, accept_probs, ms, ec = jax.vmap(mcmc.sample, in_axes=(0,None,None))(rng.split(4), x, y)
+        jaxtorch.pt.save(chains, 'chains.pt')
+        import json
+        with open('stuff.json', 'w') as fp:
+            json.dump({'xs': ms['info2']['γ'][0].tolist(), 'ds': ms['info2']['d'][0].tolist(), 'αs': ms['info2']['α'][0].tolist()}, fp)
+
+        print(jnp.square(ec).mean(1))
+
         # chains, accept_probs, ms = mcmc.sample(rng.split(), x, y)
         # chains = {p:v[None] for (p,v) in chains.items()}
         print('acceptance rate:', accept_probs.mean())
         jaxtorch.pt.save(chains, 'chains.pt')
 
         # chains = jaxtorch.pt.load('chains.pt')
-        query_xs = jax.random.uniform(jax.random.PRNGKey(1), [10, in_dim], dtype=jnp.float32, minval=-5, maxval=5)
+        query_xs = jax.random.uniform(jax.random.PRNGKey(1), [10, in_dim], dtype=jnp.float32, minval=-1, maxval=1)
         query_ys = v_fwd(chains, query_xs) # c n x ...
         R = gelman_rubin(query_ys)
         print('gelman-rubin:', R)

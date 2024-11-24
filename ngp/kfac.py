@@ -40,6 +40,17 @@ def kfac(Y):
     P, Q = jax.lax.fori_loop(0, 4, step_fn, (P,Q))
     return P, Q
 
+if __name__ == '__main__':
+    Y = jax.random.normal(jax.random.PRNGKey(0), [1000, 2,2])
+    A, B = jax.random.normal(jax.random.PRNGKey(2), [2,2,2])**2
+    print('A:', A)
+    print('B:', B)
+    Y = jax.vmap(lambda Y: A @ Y @ B)(Y)
+    P, Q = kfac(Y)
+    print(jnp.linalg.inv(jnp.linalg.cholesky(P)))
+    print(jnp.linalg.inv(jnp.linalg.cholesky(Q)).T)
+    dat = jnp.linalg.inv(jnp.linalg.cholesky(P)) @ Y @ jnp.linalg.inv(jnp.linalg.cholesky(Q)).T
+    print(kfac(dat))
 # Y = 10*jnp.array([jax.random.normal(jax.random.PRNGKey(i), [2,2]) for i in range(100)])
 # P, Q = kfac(Y)
 # print(P)

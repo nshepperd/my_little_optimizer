@@ -45,6 +45,7 @@ class KroneckerMetric(Metric):
     Q_sqrt: jax.Array
     P_invsqrt: jax.Array
     Q_invsqrt: jax.Array
+    mean: jax.Array
     
     def ndim(self):
         m = self.P.shape[0]
@@ -55,15 +56,15 @@ class KroneckerMetric(Metric):
         m = self.P.shape[0]
         n = self.Q.shape[0]
         assert list(W.shape) == [m, n]
-        return (self.P_invsqrt @ W @ self.Q_invsqrt).reshape(-1)
+        return (self.P_invsqrt @ (W - self.mean) @ self.Q_invsqrt.T).reshape(-1)
         
     def unwhiten(self, W_white: jax.Array) -> jax.Array:
         m = self.P.shape[0]
         n = self.Q.shape[0]
-        return self.P_sqrt @ W_white.reshape([m,n]) @ self.Q_sqrt
+        return (self.P_sqrt @ W_white.reshape([m,n]) @ self.Q_sqrt.T) + self.mean
 
     def tree_flatten(self):
-        return (self.P, self.Q, self.P_sqrt, self.Q_sqrt, self.P_invsqrt, self.Q_invsqrt), ()
+        return (self.P, self.Q, self.P_sqrt, self.Q_sqrt, self.P_invsqrt, self.Q_invsqrt, self.mean), ()
     @staticmethod
     def tree_unflatten(static, dynamic):
         return KroneckerMetric(*static, *dynamic)
@@ -73,7 +74,8 @@ class KroneckerMetric(Metric):
 class FullCovMetric(Metric):
     M: jax.Array
     L: jax.Array
-    L_inv: jax.Array
+    # L_inv: jax.Array
+    mean: jax.Array
     # def __init__(self, Sigma: Array):
     #     self.L = jnp.linalg.cholesky(Sigma)
     #     self.L_inv = jnp.linalg.inv(self.L)
@@ -82,14 +84,15 @@ class FullCovMetric(Metric):
         return self.M.shape[0]
 
     def whiten(self, x: jax.Array) -> jax.Array:
-        return (self.L_inv @ x).reshape(-1)
+        return jax.scipy.linalg.solve_triangular(self.L, (x - self.mean), lower=True).reshape(-1)
+        # return (self.L_inv @ (x - self.mean)).reshape(-1)
         
     def unwhiten(self, x_white: jax.Array) -> jax.Array:
         m = self.M.shape[0]
-        return self.L @ x_white.reshape(m)
+        return self.L @ x_white.reshape(m) + self.mean
     
     def tree_flatten(self):
-        return (self.M, self.L, self.L_inv), ()
+        return (self.M, self.L, self.mean), ()
     @staticmethod
     def tree_unflatten(static, dynamic):
         return FullCovMetric(*static, *dynamic)
@@ -137,25 +140,24 @@ class StdScalarMetricEstimator(MetricEstimator):
 class CovarianceMetricEstimator(MetricEstimator):
     def __call__(self, samples: jax.Array) -> FullCovMetric:
         assert len(samples.shape) == 2
+        mean = jnp.mean(samples, axis=0)
+        samples -= mean
         cov = jnp.mean(samples[:,None,:] * samples[:,:,None], axis=0)
         L = jnp.linalg.cholesky(cov)
-        return FullCovMetric(cov, L, jnp.linalg.inv(L))
+        # L_inv = jax.scipy.linalg.solve_triangular(L, jnp.eye(cov.shape[0]), lower=True)
+        return FullCovMetric(cov, L, mean)
 
 class KroneckerMetricEstimator(MetricEstimator):
     def __call__(self, samples: jax.Array) -> KroneckerMetric:
         assert len(samples.shape) == 3
-        samples -= samples.mean(0)
+        mean = jnp.mean(samples, axis=0)
+        samples -= mean
         P, Q = kfac(samples)
-
-        # def sqrt(A):
-        #     evals, evecs = jnp.linalg.eigh(A)
-        #     sqrt_evals = jnp.sqrt(jnp.maximum(evals, 1e-10))
-        #     return evecs @ jnp.diag(sqrt_evals) @ evecs.T
-
-        # P_sqrt = sqrt(P)
-        # Q_sqrt = sqrt(Q)
-        # return KroneckerMetric(P, Q, P_sqrt, Q_sqrt, jnp.linalg.inv(P_sqrt), jnp.linalg.inv(Q_sqrt))
-        return KroneckerMetric(P, Q, jnp.linalg.cholesky(P), jnp.linalg.cholesky(Q), jnp.linalg.inv(jnp.linalg.cholesky(P)), jnp.linalg.inv(jnp.linalg.cholesky(Q)))
+        P_sqrt = jnp.linalg.cholesky(P)
+        Q_sqrt = jnp.linalg.cholesky(Q)
+        P_invsqrt = jax.scipy.linalg.solve_triangular(P_sqrt, jnp.eye(P.shape[0]), lower=True)
+        Q_invsqrt = jax.scipy.linalg.solve_triangular(Q_sqrt, jnp.eye(Q.shape[0]), lower=True)
+        return KroneckerMetric(P, Q, P_sqrt, Q_sqrt, P_invsqrt, Q_invsqrt, mean)
 
 @dataclass
 class DictionaryMetricEstimator(MetricEstimator):
@@ -177,51 +179,34 @@ if __name__ == '__main__':
     from jaxtorch import PRNG
     import einops
 
+    # check kronecker metric
     kme = KroneckerMetricEstimator()
     Yn = jax.random.normal(jax.random.PRNGKey(0), [1000,2,2])
-    Y = Yn.at[:,1,:].add(Yn[:,0,:])
+    A, B = 100*jax.random.normal(jax.random.PRNGKey(2), [2,2,2])
+    print('A:', A)
+    print('B:', B)
+    Y = jax.vmap(lambda Y: A @ Y @ B)(Yn) + 100
     m = kme(Y)
-
-    def cov(xs):
-        return (xs[:,:,None] * xs[:,None,:]).mean(0)
 
     w = jax.vmap(m.whiten)(Y)
     uwu = jax.vmap(m.unwhiten)(w)
-    print('w:', cov(w))
-    print('uwu:', cov(uwu.reshape(-1,4)))
-    print(cov(Yn.reshape(-1,4)))
-    print(cov(Y.reshape(-1,4)))
+    print('max difference in roundtrip reconstruction:', jnp.max(jnp.abs(Y - uwu)))
 
-    # @jax.jit
-    # def logp(theta):
-    #     return -0.5 * jnp.sum(jnp.square(theta/jnp.array([1,200])))
+    def cov(xs):
+        return (xs[:,:,None] * xs[:,None,:]).mean(0)
+    
+    print('covariance of whitened data:', cov(w))
 
-    # rng = PRNG(jax.random.PRNGKey(0))
-    # theta = jax.random.normal(rng.split(), [2])
+    # check full covariance metric
+    print('CovarianceMetricEstimator:')
+    fme = CovarianceMetricEstimator()
+    Yn = jax.random.normal(jax.random.PRNGKey(0), [100,4])
+    A = jax.random.normal(jax.random.PRNGKey(2), [4,4])
+    print('A:', A)
+    Y = Yn @ A + 1
+    m = fme(Y)
 
-    # def k_nuts(key, theta, ε):
-    #     return metric_nuts(key, theta, logp, ε, ScalarMetric(jnp.array([1.,200.]), [2]))
-
-
-    # @jax.jit
-    # def sample(key, theta, ε):
-    #     @scan_tqdm(30000)
-    #     def body_fn(carry, i):
-    #         key, theta = carry
-    #         key, subkey = jax.random.split(key)
-    #         theta, alpha = k_nuts(subkey, theta, ε)
-    #         return (key, theta), (theta, alpha)
-    #     return jax.lax.scan(body_fn, (key, theta), jnp.arange(30000))[1]
-
-
-    # samples, alphas = sample(rng.split(), theta, 1.0)
-    # samples = jnp.stack(samples)
-    # alphas = jnp.stack(alphas)
-    # print(samples.shape)
-    # print(samples.std(0), jax.random.normal(rng.split(),samples.shape).std(0))
-    # print(alphas.mean())
-    # # scatter plot
-    # plt.scatter(samples[:,0], samples[:,1])
-    # plt.plot(samples[:,0], samples[:,1], color='red', alpha=0.1)
-    # plt.show()
-
+    w = jax.vmap(m.whiten)(Y)
+    uwu = jax.vmap(m.unwhiten)(w)
+    print('max difference in roundtrip reconstruction:', jnp.max(jnp.abs(Y - uwu)))
+    print('covariance of whitened data:', cov(w))
