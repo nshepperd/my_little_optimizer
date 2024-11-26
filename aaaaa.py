@@ -57,7 +57,9 @@ alpha_pred = gp_alpha.predictb(jnp.stack([xs[:,0], ts],axis=-1),
 p_middle = normalcdf(0.95, alpha_pred[0], alpha_pred[1]) - normalcdf(0.05, alpha_pred[0], alpha_pred[1])
 
 # jnp.stack([xs[:,0], jnp.linspace(0,1, xs.shape[0])],axis=-1)
-mean, var = gp.predictb(xs, rs, array_γ)
+xs_t = jnp.concatenate([xs, ts[:,None]],axis=-1)
+array_γ_t = jnp.concatenate([array_γ, jnp.full([100*100,1], 1.0)], axis=-1)
+mean, var = gp.predictb(xs_t, rs, array_γ_t)
 u = mean - 2*jnp.sqrt(var)
 γ = array_γ[jnp.argmax(u)]
 

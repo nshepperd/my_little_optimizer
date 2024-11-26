@@ -9,6 +9,7 @@ import einops
 import jax.scipy as jsp
 
 from ngp.gaussian_process import GP
+from ngp.util import Fn, fn
 
 def leapfrog(theta: jax.Array, r: jax.Array, logp_grad, eps: jax.Array) -> Tuple[jax.Array, jax.Array]:
     """Single leapfrog step"""
@@ -142,8 +143,11 @@ def ahmc(key, theta, logp, warmup_steps, εmin=1e-5, εmax=1.0, Lmin = 2, Lmax =
 def normalcdf(x, mean, var):
     return 0.5 * jsp.special.erfc((mean - x)/(jnp.sqrt(2 * var)))
 
-@partial(jax.jit, static_argnums=(2,3,8))
-def ahmc_fast(key, theta, logp, warmup_steps, εmin=1e-5, εmax=1.0, Lmin = 2, Lmax = 100, tqdm=True):
+def ahmc_fast(key: jax.Array, theta: jax.Array, logp: Fn, warmup_steps: int, εmin=1e-5, εmax=1.0, Lmin = 2, Lmax = 100, tqdm=True):
+    return ahmc_fast_(key, theta, fn(logp), warmup_steps, εmin, εmax, Lmin, Lmax, tqdm)
+
+@partial(jax.jit, static_argnums=(3,8))
+def ahmc_fast_(key, theta, logp: Fn, warmup_steps, εmin, εmax, Lmin, Lmax, tqdm):
     # γ0 = jnp.array([0.5, 0.5])
     A = jnp.array([jnp.log(εmax) - jnp.log(εmin), 
                    Lmax - Lmin])
@@ -233,10 +237,10 @@ def ahmc_fast(key, theta, logp, warmup_steps, εmin=1e-5, εmax=1.0, Lmin = 2, L
 identity = lambda x: x
 
 def sample_hmc(key, theta, logp, n_steps, ε, L, tqdm=True):
-    return sample_hmc_(key, theta, logp, n_steps, ε, L, tqdm)
+    return sample_hmc_(key, theta, fn(logp), n_steps, ε, L, tqdm)
 
-# @partial(jax.jit, static_argnums=(2,3,6))
-def sample_hmc_(key, theta, logp, n_steps, ε, L, tqdm):
+# @partial(jax.jit, static_argnums=(3,6))
+def sample_hmc_(key, theta, logp: Fn, n_steps, ε, L, tqdm):
     @(scan_tqdm(n_steps) if tqdm else identity)
     def step_fn(carry, i):
         key, theta = carry

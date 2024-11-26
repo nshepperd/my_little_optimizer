@@ -1,13 +1,19 @@
 import jax
+from typing import Protocol
 from functools import partial
 
-def Fn(fn: callable):
-    if isinstance(fn, (StaticFn, Partial)):
-        return fn
-    return StaticFn(fn)
+class Fn(Protocol):
+    """Callable that should be a valid pytree."""
+    def __call__(self, *args, **kwargs):
+        ...
+
+def fn(f: callable):
+    if isinstance(f, (StaticFn, Partial)):
+        return f
+    return StaticFn(f)
 
 @jax.tree_util.register_pytree_node_class
-class StaticFn(object):
+class StaticFn(Fn):
     fn: callable
     def __init__(self, fn):
         self.fn = fn
@@ -20,7 +26,7 @@ class StaticFn(object):
         return StaticFn(*static, *dynamic)
 
 @jax.tree_util.register_pytree_node_class
-class Partial(object):
+class Partial(Fn):
     fn: callable
     args: tuple
     kwargs: dict

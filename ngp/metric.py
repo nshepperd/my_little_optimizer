@@ -24,7 +24,7 @@ class ScalarMetric(Metric):
     shape: Shape
     def whiten(self, array):
         assert list(array.shape) == list(self.shape)
-        return array.reshape(-1) / self.a
+        return (array / self.a).reshape(-1)
     def unwhiten(self, array):
         return array.reshape(self.shape) * self.a
     def ndim(self):
@@ -101,6 +101,9 @@ class FullCovMetric(Metric):
 @dataclass
 class DictionaryMetric(Metric):
     metrics: Dict[str, Metric]
+    
+    def ndim(self):
+        return sum(m.ndim() for m in self.metrics.values())
         
     def whiten(self, params: Dict[str, Any]) -> jax.Array:
         assert set(params.keys()) == set(self.metrics.keys())
