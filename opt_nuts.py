@@ -100,7 +100,7 @@ if __name__ == '__main__':
         scales = mkscales(model)
         metrics = {}
         for p in model.parameters():
-            metrics[p.name] = ScalarMetric(scales[p.name], p.shape)
+            metrics[p.name] = ScalarMetric(scales[p.name])
         return DictionaryMetric(metrics)
 
     def mkmetric_estimator(model):
@@ -306,7 +306,7 @@ if __name__ == '__main__':
                     Hpart = Hpart.reshape(Hpart.shape[0], np.prod(shape), np.prod(shape))
                     d = jnp.diagonal(Hpart, axis1=1, axis2=2)
                     scale = jnp.mean(jnp.square(d))**-0.25
-                    return ScalarMetric(scale, shape)
+                    return ScalarMetric(scale)
 
                 out = {}
                 for p in model.parameters():
@@ -317,15 +317,14 @@ if __name__ == '__main__':
             chains, ms = sample_adaptive(jax.random.PRNGKey(0),
                                         logp = Partial(f_w_beta, x, y),
                                         init = Partial(lambda key: {'params': model.init_weights(key), 'log_sigma': jnp.array([jnp.log(0.1)])}),
-                                        n_chains = 4, n_samples = 1000,
-                                        metric0 = DictionaryMetric({'params': mkmetric(model), 'log_sigma': ScalarMetric(jnp.array(jnp.log(2.0)), [1])}),
+                                        n_chains = 4, n_samples = 2000,
+                                        metric0 = DictionaryMetric({'params': mkmetric(model), 'log_sigma': ScalarMetric(jnp.array(jnp.log(2.0)))}),
                                         metric_estimator = partial(full_hessian, x, y)) #DictionaryMetricEstimator({'params': mkmetric_estimator(model), 'log_sigma': CovarianceMetricEstimator()}))
             # decimate to save memory
             chains = tree_map(lambda x: einops.rearrange(x, 'c (n x) ... -> x c n ...', x=10)[-1], chains)
             accept_probs = ms['alphas'].mean()
 
             jaxtorch.pt.save(chains, 'chains.pt')
-            jaxtorch.pt.save(ms['pchain'], 'pchains.pt')
             import json
             with open('stuff.json', 'w') as fp:
                 json.dump({'xs': ms['info1']['γ'][0].tolist(), 'ds': ms['info1']['d'][0].tolist(), 'αs': ms['info1']['α'][0].tolist()}, fp)
