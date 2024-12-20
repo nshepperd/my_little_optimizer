@@ -81,7 +81,7 @@ class DictionaryMetric(Metric[Dict[str,Any]]):
     metrics: Dict[str, Metric]
     
     def whiten(self, xs: Dict[str, Any]) -> Dict[str, Any]:
-        assert set(xs.keys()) == set(self.metrics.keys())
+        assert set(xs.keys()) == set(self.metrics.keys()), f'{xs.keys()} != {self.metrics.keys()}'
         return {k: self.metrics[k].whiten(v) for k,v in xs.items()}
     
     def unwhiten(self, xs: Dict[str, Any]) -> Dict[str, Any]:

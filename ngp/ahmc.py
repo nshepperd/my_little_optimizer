@@ -9,7 +9,7 @@ import einops
 import jax.scipy as jsp
 
 from ngp.gaussian_process import GP
-from ngp.util import Fn, fn
+from ngp.util import Fn, fn, Partial
 
 def leapfrog(theta: jax.Array, r: jax.Array, logp_grad, eps: jax.Array) -> Tuple[jax.Array, jax.Array]:
     """Single leapfrog step"""
@@ -25,7 +25,6 @@ def compute_hamiltonian(theta, r, logp):
 def finiteor(x, y):
     return jnp.where(jnp.isfinite(x), x, y)
 
-# @partial(jax.jit, static_argnums=(2,))
 def hmc_kernel(key, theta, logp, ε, L):
     subkeys = jax.random.split(key, 3)
     r0 = jax.random.normal(subkeys[0], theta.shape)
@@ -57,97 +56,14 @@ def matern52(x, y, σ=0.1):
     d = jnp.sqrt(jnp.sum(jnp.square(x-y)))
     return (1 + jnp.sqrt(5)*d/σ + 5/3 * d**2/σ**2) * jnp.exp(-jnp.sqrt(5)*d/σ)
 
-# @partial(jax.jit, static_argnums=(2,3))
-def ahmc(key, theta, logp, warmup_steps, εmin=1e-5, εmax=1.0, Lmin = 2, Lmax = 100):
-    γ0 = jnp.array([0.5, 0.5])
-    A = jnp.array([jnp.log(εmax) - jnp.log(εmin), 
-                   Lmax - Lmin])
-    B = jnp.array([jnp.log(εmin), Lmin])
-    logε0, L0 = γ0*A+B
-    ε0 = jnp.exp(logε0)
-    L0 = jnp.clip(L0.astype(jnp.int32), Lmin, Lmax)
-
-    α = 1.0
-
-    key, subkey = jax.random.split(key)
-    theta, metrics = hmc_kernel(subkey, theta, logp, ε0, L0)
-    xs = [γ0]
-    ds = [metrics['d']]
-
-
-    gp = GP(partial(matern52, σ=0.2), 0.2)
-    gp_alpha = GP(partial(matern52, σ=0.1), 0.2)
-
-    array_ε = jnp.linspace(0.0, 1.0, 100)
-    array_L = jnp.linspace(0.0, 1.0, 100)
-    array_γ = einops.rearrange(jnp.stack(jnp.meshgrid(array_ε, array_L), axis=-1),
-                               'a b c -> (a b) c')
-
-    info = []
-
-    for i in tqdm(range(warmup_steps)):
-        rs = jnp.stack(ds)
-        s = α/jnp.max(rs)
-        rs = s * rs
-
-        # upper confidence bound
-        beta = jnp.sqrt(2 * jnp.log((i+1)**3 * jnp.pi**2/(3*0.1)))
-        mean, var = gp.predictb(jnp.stack(xs), rs, array_γ)
-        u = var #mean + beta * jnp.sqrt(var)
-        γ = array_γ[jnp.argmax(u)]
-        # if not jnp.all(jnp.isfinite(u)):
-        #     exit('nyan')
-
-        logε, L = γ * A + B
-        ε = jnp.exp(logε)
-        L = jnp.clip(L.astype(jnp.int32), Lmin, Lmax)
-
-        key, subkey = jax.random.split(key)
-        # theta, metrics = hmc_kernel(subkey, theta, logp, ε, L)
-        theta, _, metrics = sample_hmc(subkey, theta, logp, 10, ε, L, False)
-        xs.append(γ)
-        ds.append(metrics['d'].mean())
-        metrics = {'d': metrics['d'].mean()}
-        metrics['ε'] = ε
-        metrics['L'] = L
-        metrics['γ'] = γ
-        metrics['logp'] = logp(theta)
-        info.append(metrics)
-
-    xs = jnp.stack(xs)
-    ds = jnp.stack(ds)
-
-    s = α/jnp.max(ds)
-    rs = s * ds
-
-    # lower confidence bound (conservative estimate of ε and L)
-    mean, var = gp.predictb(xs, rs, array_γ)
-    u = mean - 2*jnp.sqrt(var)
-    γ = array_γ[jnp.argmax(u)]
-    logε, L = γ * A + B
-    ε = jnp.exp(logε)
-    L = jnp.clip(L.astype(jnp.int32), Lmin, Lmax)
-
-    # print('final ε:', ε)
-    # print('final L:', L)
-
-    # import json
-    # with open('stuff.json', 'w') as fp:
-    #     json.dump({'xs': xs.tolist(), 'rs': rs.tolist()}, fp)
-
-    keys = list(info[0].keys())
-    info = {k:jnp.stack([info[i][k] for i in range(warmup_steps)]) for k in keys}
-
-    return (theta, ε, L, info)
-
 def normalcdf(x, mean, var):
     return 0.5 * jsp.special.erfc((mean - x)/(jnp.sqrt(2 * var)))
 
-def ahmc_fast(key: jax.Array, theta: jax.Array, logp: Fn, warmup_steps: int, εmin=1e-5, εmax=1.0, Lmin = 2, Lmax = 100, tqdm=True):
-    return ahmc_fast_(key, theta, fn(logp), warmup_steps, εmin, εmax, Lmin, Lmax, tqdm)
+def ahmc_fast(key: jax.Array, theta: jax.Array, logp: Fn, warmup_steps: int, εmin=1e-5, εmax=1.0, Lmin = 2, Lmax = 100, tqdm=True, pass_i=False):
+    return ahmc_fast_(key, theta, fn(logp), warmup_steps, εmin, εmax, Lmin, Lmax, tqdm, pass_i)
 
-@partial(jax.jit, static_argnums=(3,8))
-def ahmc_fast_(key, theta, logp: Fn, warmup_steps, εmin, εmax, Lmin, Lmax, tqdm):
+@partial(jax.jit, static_argnums=(3,8,9))
+def ahmc_fast_(key, theta, logp: Fn, warmup_steps, εmin, εmax, Lmin, Lmax, tqdm, pass_i):
     # γ0 = jnp.array([0.5, 0.5])
     A = jnp.array([jnp.log(εmax) - jnp.log(εmin), 
                    Lmax - Lmin])
@@ -198,7 +114,7 @@ def ahmc_fast_(key, theta, logp: Fn, warmup_steps, εmin, εmax, Lmin, Lmax, tqd
 
         # jax.debug.print('choosing next (ε,L): ({},{}) - prediction = {}±{} - (logp = {})', ε, L, mean[ix], jnp.sqrt(var[ix]), logp(theta))
         key, subkey = jax.random.split(key)
-        theta, metrics_ = hmc_kernel(subkey, theta, logp, ε, L)
+        theta, metrics_ = hmc_kernel(subkey, theta, partial(logp, i=i) if pass_i else logp, ε, L)
         # theta, _, metrics_ = sample_hmc(subkey, theta, logp, 10, ε, L, False)
         xs = xs.at[i].set(γ)
         ds = ds.at[i].set(metrics_['d'].mean())
@@ -209,7 +125,8 @@ def ahmc_fast_(key, theta, logp: Fn, warmup_steps, εmin, εmax, Lmin, Lmax, tqd
         metrics['α'] = metrics_['alpha'].mean()
         metrics['L'] = L
         metrics['γ'] = γ
-        metrics['logp'] = logp(theta)
+        metrics['theta'] = theta
+        metrics['logp'] = logp(theta, i=i) if pass_i else logp(theta)
         return (key, theta, xs, ds, alphas), (metrics)
 
     (key, theta, xs, ds, alphas), (info) = jax.lax.scan(scan_fn, carry, jnp.arange(warmup_steps))

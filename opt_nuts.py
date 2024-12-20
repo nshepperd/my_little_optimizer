@@ -83,7 +83,8 @@ if __name__ == '__main__':
     print(' y:', y.shape)
 
     y = jnp.where(jnp.isfinite(y), y, jnp.max(y[jnp.isfinite(y)]))
-    model = nn.Sequential([nn.Linear(in_dim, 10), nn.Tanh(), nn.Linear(10, 10), nn.Tanh(), nn.Linear(10, out_dim)])
+    # model = nn.Sequential([nn.Linear(in_dim, 10), nn.Tanh(), nn.Linear(10, 10), nn.Tanh(), nn.Linear(10, out_dim)])
+    model = nn.Sequential([nn.Linear(in_dim, 10), nn.LeakyReLU(), nn.Linear(10, out_dim)])
     model.name_everything_()
 
     aq_steps = 100
@@ -119,53 +120,11 @@ if __name__ == '__main__':
         cx = Context(params, None)
         prediction = model(cx, x)
         log_p_y = -0.5 * jnp.sum(jnp.square(y - prediction)/σ_y**2)
-        log_p_eps = sum(-0.5 * jnp.sum(jnp.square(params[p.name]/scales[p.name])) for p in model.parameters())
+        # log_p_eps = sum(-0.5 * jnp.sum(jnp.square(params[p.name]/scales[p.name])) for p in model.parameters())
+        # laplace prior
+        log_p_eps = sum(-0.5 * jnp.sum(jnp.abs(params[p.name]/scales[p.name])) for p in model.parameters())
         return log_p_y + log_p_eps
     
-    def f_eps(metric, x, y, eps, σ_y=0.1):
-        params = metric.unwhiten(eps)
-        return f_loss(x, y, params, σ_y)
-
-    @jax.tree_util.register_pytree_node_class
-    @dataclass
-    class MCMC:
-        n_steps: int
-        n_chains: int
-
-        def tree_flatten(self):
-            return (), (self.n_steps, self.n_chains)
-        @staticmethod
-        def tree_unflatten(static, dynamic):
-            return MCMC(*static, *dynamic)
-
-        @jax.jit
-        def sample(self, key: jax.Array, x: jax.Array, y: jax.Array):
-            keys = jax.random.split(key,10)
-            params = model.init_weights(keys[0])
-
-            eps = metric0.whiten(params)
-            ε, εp = find_reasonable_epsilon(keys[9], eps, Partial(f_eps, metric0, x, y))
-            jax.debug.print('Found step size {} with acceptance probability {}', ε, εp)
-            # eps, ε, metrics = warmup_with_dual_averaging(keys[2], eps, partial(f_loss, metric0), ε)
-            # jax.debug.print('Warmup finished with step size {} and log probs {}', ε, metrics['probs'])
-            (eps, ε, L, info1) = ahmc_fast(keys[1], eps, Partial(f_eps, metric0, x, y), 100, εmin=ε/100, εmax=ε*100, Lmin = 2, Lmax = 2000)
-            jax.debug.print('Warmup finished with ε={} and L={}, d={}, logp={}', ε, L, info1['d'].mean(), info1['logp'][-1])
-            # chain, accept_prob, ms = nuts_sample(keys[3], eps, partial(f_loss, metric0), 25, ε)
-            eps, chain, ms = sample_hmc(keys[2], eps, Partial(f_eps, metric0, x, y), 1000, ε, L)
-            jax.debug.print('Finished first adaptation interval - accept_prob = {}', ms['alpha'].mean())
-            params = metric0.unwhiten(eps)
-            pchain = jax.vmap(metric0.unwhiten)(chain)
-            metric = estimator(pchain)
-            echain = jax.vmap(metric.whiten)(pchain)
-            eps = metric.whiten(params)
-            (eps, ε, L, info2) = ahmc_fast(keys[3], eps, Partial(f_eps, metric, x, y), 100, εmin=1e-4, εmax=1.0, Lmin = 2, Lmax = 2000)
-            jax.debug.print('Warmup finished with ε={} and L={}, d={}, logp={}', ε, L, info2['d'].mean(), info2['logp'][-1])
-            eps, chain, ms = sample_hmc(keys[8], eps, Partial(f_eps, metric, x, y), self.n_steps, ε, L)
-
-            chain = einops.rearrange(chain, '(x n) ... -> x n ...', x=10)[-1]
-            probs = jax.vmap(Partial(f_eps, metric, x, y))(chain)
-            chain = jax.vmap(metric.unwhiten)(chain)
-            return chain, ms['alpha'], {'probs':probs, 'info1':info1, 'info2':info2}, echain
 
     @jax.jit
     @partial(jax.vmap, in_axes=(0,None))
@@ -174,24 +133,34 @@ if __name__ == '__main__':
         cx = Context(chains, None)
         return model(cx, x)
 
-    def expected_improvement(waterline: jax.Array, mean: jax.Array, std: jax.Array, eps=0.0):
-        return log_h((mean - waterline)/(std+eps)) + jnp.log(std+eps)
+    def log_expected_improvement(chains, waterline, eps=0.01):
+        """Log expected improvement acquisition function (minimization)."""
+        def f(chains, waterline, eps, xs):
+            dist = v_fwd(chains, xs).squeeze(-1)
+            mean = dist.mean((0,1)) # [N]
+            std = dist.std((0,1)) # [N]
+            return log_h((waterline - mean)/(std+eps)) + jnp.log(std+eps)
+        return Partial(f, chains, waterline, eps)
+    
+    # @jax.jit
+    # def acquisition_function(chains, xs, waterline):
+    #     # best: [] scalar
+    #     dist = v_fwd(chains, xs).squeeze(-1)
+    #     mean = dist.mean((0,1)) # [N]
+    #     std = dist.std((0,1)) # [N]
+    #     return expected_improvement(waterline, mean, std)
+    #     # return -(mean + std)
 
-    @jax.jit
-    def acquisition_function(chains, xs, waterline):
-        # best: [] scalar
-        dist = v_fwd(chains, xs).squeeze(-1)
-        mean = dist.mean((0,1)) # [N]
-        std = dist.std((0,1)) # [N]
-        # return expected_improvement(waterline, mean, std)
-        return -(mean + std)
-
-    @jax.jit
-    def findmax(key, chains, waterline):
-        return jax.vmap(findmax_ac_, in_axes=(0,None,None))(jax.random.split(key,101),chains,waterline)
+    def findmax(key, acquisition_function, mask=None, maskval=None, n=101):
+        xs, metrics = jax.vmap(findmax_ac_, in_axes=(0,None,None,None))(jax.random.split(key,n), acquisition_function, mask, maskval)
+        rs = acquisition_function(xs)
+        metrics['rs'] = rs
+        return xs[jnp.argmax(rs)], metrics
 
     ac_steps = 500
-    def findmax_ac_(key, chains, waterline):
+
+    @jax.jit
+    def findmax_ac_(key, acquisition_function, mask, maskval):
         key, subkey = jax.random.split(key)
         x = jax.random.uniform(subkey, [in_dim], minval=-1, maxval=1)
 
@@ -199,8 +168,8 @@ if __name__ == '__main__':
         opt_state = opt.init(x)        
 
         def f_loss(x, key, p):
-            x += jax.random.normal(key, (10,)+x.shape) * 0.5 * p
-            ac = acquisition_function(chains, x, waterline)
+            x += jax.random.normal(key, (50,)+x.shape) * 0.5 * p
+            ac = acquisition_function(x)
             loss = -ac.mean()
             return loss, (loss, {'ac':ac})
         f_grad = jax.grad(f_loss, has_aux=True)
@@ -210,10 +179,11 @@ if __name__ == '__main__':
             x, opt_state, key = carry
             key, subkey = jax.random.split(key)
             grad, value = f_grad(x, subkey, (1-i/findmin_steps))
-            # updates, opt_state = opt.update(grad, opt_state, x, value=value, grad=grad, value_fn=lambda x:f_loss(x)[0])
             updates, opt_state = opt.update(grad, opt_state, x)
             x = optax.apply_updates(x, updates)
             x = jnp.clip(x, -1, 1)
+            if mask is not None:
+                x = jnp.where(mask, maskval, x)
             return (x, opt_state, key), {'value': value}
         
         (x, _, _), metrics = jax.lax.scan(step, (x, opt_state, key), jnp.arange(ac_steps))
@@ -265,21 +235,6 @@ if __name__ == '__main__':
 
     for i in range(1):
         rng = PRNG(jax.random.PRNGKey(2))
-        mcmc = MCMC(n_steps=2000, n_chains=4)
-
-        # params = model.init_weights(rng.split())
-        # eps = metric0.whiten(params)
-        # ε, εp = find_reasonable_epsilon(rng.split(), eps, partial(f_loss, metric0, x, y))
-        # jax.debug.print('Found step size {} with acceptance probability {}', ε, εp)
-        # (eps, ε, L, info) = ahmc_fast(rng.split(), eps, partial(f_loss, metric0, x, y), 100, εmin=1e-8, εmax=1.0, Lmin = 2, Lmax = 1000)
-        # # (eps, ε, L, info) = ahmc_fast(rng.split(), eps, partial(f_loss, metric0, x, y), 1000, εmin=1e-4, εmax=1.0, Lmin = 2, Lmax = 100)
-        # print(f'Found ε={ε}, L={L}, d={info["d"].mean()}, logp={info["logp"][-1]}')
-        # import json
-        # with open('stuff.json', 'w') as fp:
-        #     json.dump({'xs': info['γ'].tolist(), 'ds': info['d'].tolist(), 'αs': info['α'].tolist()}, fp)
-        # exit()
-
-        # chains, accept_probs, ms, ec = jax.vmap(mcmc.sample, in_axes=(0,None,None))(rng.split(4), x, y)
 
         if True:
             def f_w_beta(x, y, state):
@@ -291,7 +246,9 @@ if __name__ == '__main__':
                 # sigma = 0.05
                 log_p_y = -0.5 * jnp.sum(jnp.square(y - prediction)/sigma**2)
                 log_p_y += -0.5 * np.prod(y.shape) * (jnp.log(2 * jnp.pi) + log_sigma*2)
-                log_p_params = sum(-0.5 * jnp.sum(jnp.square(params[p.name]/scales[p.name])) for p in model.parameters())
+                # log_p_params = sum(-0.5 * jnp.sum(jnp.square(params[p.name]/scales[p.name])) for p in model.parameters())
+                # laplace prior
+                log_p_params = sum(-0.5 * jnp.sum(jnp.abs(params[p.name]/scales[p.name])) for p in model.parameters())
                 mu_log_sigma = jnp.log(0.1)
                 std_log_sigma = jnp.log(2.0)
                 log_p_sigma = -0.5 * jnp.square((log_sigma - mu_log_sigma)/std_log_sigma)
@@ -341,31 +298,52 @@ if __name__ == '__main__':
         R = gelman_rubin(query_ys)
         print('gelman-rubin:', R)
 
-        xmax, metrics = findmax(jax.random.PRNGKey(1), chains, jnp.max(y))
+        waterline = jnp.min(y)
+        acf = log_expected_improvement(chains, waterline)
+        xmax, metrics = findmax(jax.random.PRNGKey(1), acf)
         ymax = v_fwd(chains, xmax)
+        xmax_ac = jnp.exp(acf(xmax))
+        print('waterline:', waterline.shape, waterline)
+        print('xmax_ac:', xmax_ac.shape, xmax_ac)
         mean = jnp.mean(ymax, axis=(0,1)).squeeze(-1) # 101
-        imax = jnp.argmax(mean, axis=0)
+        std = jnp.std(ymax, axis=(0,1)).squeeze(-1)
+        print('means:', mean.shape, mean)
+        print('stds:', std.shape, std)
         print(xmax.shape)
-        print({k:v for (k,v) in zip(pars, jnp.exp(xmax[imax]*dscale+dmid))})
-        print('expected score:', mean[imax])
-        print('a')
+        print({k:v for (k,v) in zip(pars, jnp.exp(xmax*dscale+dmid))})
+        print('expected score:', mean)
+        # print('metrics:', metrics)
+
+        def lowest_mean(chains):
+            """Acquisition function for lowest expected score."""
+            def f(chains, xs):
+                return -jnp.mean(v_fwd(chains, xs), axis=(0,1)).squeeze(-1)
+            return Partial(f, chains)
+        
+        def conservative_lowest_mean(chains, γ=1.0):
+            """Acquisition function for lowest expected score."""
+            def f(chains, γ, xs):
+                dist = v_fwd(chains, xs)
+                mean = jnp.mean(dist, axis=(0,1)).squeeze(-1)
+                std = jnp.std(dist, axis=(0,1)).squeeze(-1)
+                return -(mean + γ*std)
+            return Partial(f, chains, γ)
+
 
         j = pars.index('max_lr')
         vj = jnp.linspace(-1, 1, 100)
-        keys = jax.random.split(jax.random.PRNGKey(1), 4)
-        findmin_v_ = jax.vmap(findmin_v, in_axes=(None,None,None,0))
-        findmin_v_ = jax.vmap(findmin_v_, in_axes=(0,None,None,None))
-        xmin, metrics = findmin_v_(keys, chains, j, vj)
+        xmin, metrics = jax.vmap(lambda vj: findmax(jax.random.PRNGKey(1), conservative_lowest_mean(chains, 1.0), n=4, mask=jnp.arange(len(pars))==j, maskval=vj))(vj)
+        # keys = jax.random.split(jax.random.PRNGKey(1), 4)
+        # findmin_v_ = jax.vmap(findmin_v, in_axes=(None,None,None,0))
+        # findmin_v_ = jax.vmap(findmin_v_, in_axes=(0,None,None,None))
+        # xmin, metrics = findmin_v_(keys, chains, j, vj)
         yvals = v_fwd(chains, xmin)
         ymean = yvals.mean((0,1)).squeeze(-1)
         ystd = yvals.std((0,1)).squeeze(-1)
-        ix = ymean.argmin(0)
         print(ymean.shape, ystd.shape)
-        ymean = EX.gather(ymean, ix[None], 'k x, [k] x -> x')
-        ystd = EX.gather(ystd, ix[None], 'k x, [k] x -> x')
         print(metrics)
         plt.xscale('log')
         plt.plot(jnp.exp(vj*dscale[j]+dmid[j]), ymean, label='min', color='blue')
-        plt.fill_between(jnp.exp(vj*dscale[j]+dmid[j]), ymean - ystd[ix], ymean + ystd[ix], alpha=0.2, color='blue')
+        plt.fill_between(jnp.exp(vj*dscale[j]+dmid[j]), ymean - ystd, ymean + ystd, alpha=0.2, color='blue')
         plt.show()
         # print(xmin, metrics)

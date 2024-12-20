@@ -27,20 +27,13 @@ from ngp.util import Fn, Partial
 
 import optuna
 
-@jax.tree_util.register_pytree_node_class
+@jax.tree_util.register_static
 @dataclass
 class TrivialMetric(Metric):
     def whiten(self, x):
         return x
-    
     def unwhiten(self, x):
         return x
-
-    def tree_flatten(self):
-        return (), ()
-    @staticmethod
-    def tree_unflatten(static, dynamic):
-        return TrivialMetric(*static, *dynamic)
 
 @jax.jit
 def treeformat_init(init, key):
@@ -82,26 +75,27 @@ def sample_adaptive(key, logp: Fn, init: Fn, n_chains=4, n_samples=1000, metric0
     rng = PRNG(key)
     theta = jax.vmap(init)(rng.split(n_chains))
 
+    info = {}
+
     (theta, ε, L, info1) = v_ahmc_fast(rng.split(n_chains), theta, metric, 1e-6, 1.0)
     print(f'Finished first warmup with ε={ε} and L={L}, d={info1['d'].mean(1)}, logp={info1['logp'][:,-1]}')
+    info['info1'] = info1
 
-    print('Starting initial chain for mass adaptation...')
-    theta, chain, ms = v_sample_hmc(rng.split(n_chains), theta, metric, 100, ε, L)
+    if metric_estimator is not None:
+        print('Starting initial chain for mass adaptation...')
+        theta, chain, ms = v_sample_hmc(rng.split(n_chains), theta, metric, 100, ε, L)
 
-    metric = jax.vmap(metric_estimator)(chain)
-    print('Updated mass metric.')
-    print('new metric:', metric)
+        metric = jax.vmap(metric_estimator)(chain)
+        print('Updated mass metric.')
+        print('new metric:', metric)
 
-    (theta, ε, L, info2) = v_ahmc_fast(rng.split(n_chains), theta, metric, 1e-6, 1.0)
-    print(f'Finished second warmup with ε={ε} and L={L}, d={info2['d'].mean(1)}, logp={info2['logp'][:,-1]}')
-
-    # print('Third adaption cycle...')
-    # eps, chain, ms = jax.vmap(sample_hmc, in_axes=(0,0,0,None,0,0))(rng.split(n_chains), eps, Partial(eps_logp, metric), 100, ε, L)
-    # eps, metric, pchain = remetric(metric, eps, chain)
-    # (eps, ε, L, info2) = v_ahmc_fast(rng.split(n_chains), eps, metric, 1e-6, 1.0)
-    # print(f'Finished third warmup with ε={ε} and L={L}, d={info2['d'].mean(1)}, logp={info2['logp'][:,-1]}')
+        (theta, ε, L, info2) = v_ahmc_fast(rng.split(n_chains), theta, metric, 1e-6, 1.0)
+        print(f'Finished second warmup with ε={ε} and L={L}, d={info2['d'].mean(1)}, logp={info2['logp'][:,-1]}')
+        info['info2'] = info2
 
     print('Finally sampling...')
     theta, chain, ms = v_sample_hmc(rng.split(n_chains), theta, metric, n_samples, ε, L)
     probs = jax.vmap(jax.vmap(logp))(chain)
-    return chain, {'probs': probs, 'alphas': ms['alpha'], 'info1': info1, 'info2': info2}
+    info['probs'] = probs
+    info['alphas'] = ms['alpha']
+    return chain, info
