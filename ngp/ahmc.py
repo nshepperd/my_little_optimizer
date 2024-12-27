@@ -115,7 +115,7 @@ def ahmc_fast_(key, theta, logp: Fn, warmup_steps, εmin, εmax, Lmin, Lmax, tqd
         # jax.debug.print('choosing next (ε,L): ({},{}) - prediction = {}±{} - (logp = {})', ε, L, mean[ix], jnp.sqrt(var[ix]), logp(theta))
         key, subkey = jax.random.split(key)
         theta, metrics_ = hmc_kernel(subkey, theta, partial(logp, i=i) if pass_i else logp, ε, L)
-        # theta, _, metrics_ = sample_hmc(subkey, theta, logp, 10, ε, L, False)
+        # theta, _, metrics_ = sample_hmc(subkey, theta, partial(logp, i=i) if pass_i else logp, 10, ε, L, False)
         xs = xs.at[i].set(γ)
         ds = ds.at[i].set(metrics_['d'].mean())
         alphas = alphas.at[i].set(metrics_['alpha'].mean())

@@ -2,3 +2,6 @@
 __pycache__
 *.pt
 *.json
+*.db
+.pytest_cache
+node_modules
