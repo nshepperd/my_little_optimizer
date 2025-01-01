@@ -1,35 +1,47 @@
-'use client';
-
 import React, { useState, useEffect } from 'react';
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { MoreVertical } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 const SweepDashboard = () => {
   const [sweeps, setSweeps] = useState([]);
   const [selectedSweep, setSelectedSweep] = useState(null);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [sweepToRename, setSweepToRename] = useState(null);
+  const [newName, setNewName] = useState("");
 
   useEffect(() => {
-    const fetchSweeps = async () => {
-      try {
-        const response = await fetch('/api/sweeps');
-        const data = await response.json();
-        setSweeps(data);
-      } catch (error) {
-        console.error('Error fetching sweeps:', error);
-      }
-    };
     fetchSweeps();
   }, []);
+
+  const fetchSweeps = async () => {
+    try {
+      const response = await fetch('/api/sweeps');
+      const data = await response.json();
+      setSweeps(data);
+    } catch (error) {
+      console.error('Error fetching sweeps:', error);
+    }
+  };
 
   useEffect(() => {
     const fetchResults = async () => {
@@ -39,7 +51,6 @@ const SweepDashboard = () => {
         setLoading(true);
         const response = await fetch(`/api/sweeps/${selectedSweep.id}/results`);
         const data = await response.json();
-        // Sort by created_at and add index for x-axis
         const sortedData = data
           .sort((a, b) => a.created_at - b.created_at)
           .map((result, index) => ({
@@ -56,6 +67,71 @@ const SweepDashboard = () => {
     fetchResults();
   }, [selectedSweep]);
 
+  const handleDelete = async (sweep, e) => {
+    e.stopPropagation(); // Prevent sweep selection when clicking menu
+    
+    if (!confirm(`Are you sure you want to delete sweep "${sweep.name}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/sweeps/${sweep.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) throw new Error('Failed to delete sweep');
+      
+      // Refresh sweeps list
+      await fetchSweeps();
+      
+      // Clear selected sweep if it was the one we just deleted
+      if (selectedSweep?.id === sweep.id) {
+        setSelectedSweep(null);
+      }
+    } catch (error) {
+      console.error('Error deleting sweep:', error);
+    }
+  };
+
+  const handleRename = async () => {
+    if (!sweepToRename || !newName.trim()) return;
+
+    try {
+      const response = await fetch(`/api/sweeps/${sweepToRename.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newName.trim()
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to rename sweep');
+      
+      // Refresh sweeps list
+      await fetchSweeps();
+      
+      // Update selected sweep if it was the one renamed
+      if (selectedSweep?.id === sweepToRename.id) {
+        setSelectedSweep({...selectedSweep, name: newName.trim()});
+      }
+      
+      setRenameDialogOpen(false);
+      setSweepToRename(null);
+      setNewName("");
+    } catch (error) {
+      console.error('Error renaming sweep:', error);
+    }
+  };
+
+  const openRenameDialog = (sweep, e) => {
+    e.stopPropagation(); // Prevent sweep selection when clicking menu
+    setSweepToRename(sweep);
+    setNewName(sweep.name);
+    setRenameDialogOpen(true);
+  };
+
   return (
     <div className="flex h-screen">
       {/* Sidebar */}
@@ -65,14 +141,36 @@ const SweepDashboard = () => {
           {sweeps.map((sweep) => (
             <div
               key={sweep.id}
-              className={`p-2 rounded cursor-pointer ${
+              className={`flex items-center justify-between p-2 rounded cursor-pointer ${
                 selectedSweep?.id === sweep.id
                   ? 'bg-blue-500 text-white'
                   : 'hover:bg-gray-200'
               }`}
               onClick={() => setSelectedSweep(sweep)}
             >
-              {sweep.name}
+              <span className="truncate mr-2">{sweep.name}</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                  <Button variant="ghost" size="icon" className={
+                    selectedSweep?.id === sweep.id
+                      ? 'hover:bg-blue-600'
+                      : 'hover:bg-gray-300'
+                  }>
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={(e) => openRenameDialog(sweep, e)}>
+                    Rename
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    className="text-red-600"
+                    onClick={(e) => handleDelete(sweep, e)}
+                  >
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           ))}
         </div>
@@ -170,6 +268,28 @@ const SweepDashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Rename Dialog */}
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename Sweep</DialogTitle>
+          </DialogHeader>
+          <Input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Enter new name"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRename}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
