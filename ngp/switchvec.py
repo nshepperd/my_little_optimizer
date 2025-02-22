@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, List, Callable
 
 T = TypeVar('T')
 
@@ -20,23 +20,21 @@ def the(xs):
     assert len(xs) == 1
     return xs[0]
 
-def switchvec(ix: jax.Array, branches: list[callable], x: jax.Array):
+def switchvec(ix: jax.Array, branches: List[Callable[[jax.Array], jax.Array]], x: jax.Array):
     """jax.numpy.where, but handles gradients properly when some of the branches are NaN."""
     return switchvec_(ix, Static(branches), x)
 
 @jax.custom_vjp
-def switchvec_(ix: jax.Array, branches: Static[list], x: jax.Array):
-    branches = branches.value
-    n = len(branches)
-    outs = [br(x) for br in branches]
+def switchvec_(ix: jax.Array, branches: Static[List[Callable[[jax.Array], jax.Array]]], x: jax.Array):
+    n = len(branches.value)
+    outs = [br(x) for br in branches.value]
     out = outs[0]
     for i in range(1, n):
         out = jnp.where(ix == i, outs[i], out)
     return out
-def switchvec_fwd(ix: jax.Array, branches: Static[list], x: jax.Array):
-    branches = branches.value
-    n = len(branches)
-    outs, vjps = zip(*[jax.vjp(br, x) for br in branches])
+def switchvec_fwd(ix: jax.Array, branches: Static[List[Callable[[jax.Array], jax.Array]]], x: jax.Array):
+    n = len(branches.value)
+    outs, vjps = zip(*[jax.vjp(br, x) for br in branches.value])
     out = outs[0]
     for i in range(1, n):
         out = jnp.where(ix == i, outs[i], out)

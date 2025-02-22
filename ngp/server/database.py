@@ -45,34 +45,6 @@ class Database:
 
 
 # Global database instance
-db = Database()
 
 
 # Database initialization
-def init_db():
-    with db.get_cursor() as c:
-        c.execute(
-            """
-            CREATE TABLE IF NOT EXISTS sweeps (
-                id TEXT PRIMARY KEY,
-                name TEXT,
-                parameters JSON,
-                status TEXT,
-                created_at TIMESTAMP
-            )
-        """
-        )
-        c.execute(
-            """
-            CREATE TABLE IF NOT EXISTS experiments (
-                id TEXT PRIMARY KEY,
-                sweep_id TEXT,
-                parameters JSON,
-                value REAL,
-                status TEXT,
-                created_at TIMESTAMP,
-                completed_at TIMESTAMP,
-                FOREIGN KEY (sweep_id) REFERENCES sweeps (id)
-            )
-        """
-        )
