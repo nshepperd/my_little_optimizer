@@ -23,7 +23,7 @@ import { Toaster } from "sonner";
 import BestTrialCard from "./BestTrialCard";
 import ProgressCard from "./ProgressCard";
 import TrialListCard from "./TrialListCard";
-import { TrialResult, Sweep } from "@/lib/types";
+import { TrialResult, Sweep, ApiResponse } from "@/lib/types";
 
 const SweepDashboard = () => {
   const [sweeps, setSweeps] = useState<Sweep[]>([]);
@@ -42,8 +42,11 @@ const SweepDashboard = () => {
   const fetchSweeps = async () => {
     try {
       const response = await fetch("/api/sweeps");
-      const data: Sweep[] = await response.json();
-      setSweeps(data);
+      const data: ApiResponse<Sweep[]> = await response.json();
+      if (data.status !== 'ok') {
+        throw new Error(data.message);
+      }
+      setSweeps(data.data);
     } catch (error) {
       console.error("Error fetching sweeps:", error);
     }
@@ -55,8 +58,11 @@ const SweepDashboard = () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/sweeps/${selectedSweep.id}/trials`);
-      const data: TrialResult[] = await response.json();
-      const sortedData = data
+      const data: ApiResponse<TrialResult[]> = await response.json();
+      if (data.status !== 'ok') {
+        throw new Error(data.message);
+      }
+      const sortedData = data.data
         .sort((a, b) => a.created_at - b.created_at)
         .map((result, index) => ({
           ...result,

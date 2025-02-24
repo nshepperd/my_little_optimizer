@@ -192,7 +192,7 @@ class SweepManager:
         self.sweeps[sweep_id].updated_at = int(time.time())
         self.schedule(InferTask(self, sweep_id))
     
-    def ask_params(self, sweep_id: str, params: Dict[str, float]) -> str:
+    def ask_params(self, sweep_id: str, params: Dict[str, float]) -> UUID:
         print('Asking for params, sweep_id:', sweep_id, 'params:', params)
         return self.schedule(AskTask(self, sweep_id, params))
 

@@ -52,3 +52,10 @@ export interface TrialCreateRequest {
 export interface TrialReportRequest {
   value: number;
 }
+
+export interface ApiResponse<T> {
+  status: 'ok' | 'error';
+  data: T;
+  message: string;
+  code: string;
+}

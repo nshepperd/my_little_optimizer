@@ -7,6 +7,13 @@ import numpy as np
 
 from ngp.optim import SpaceItem
 
+def req(url, method, data=None):
+    r = requests.request(method, url, json=data)
+    while r.status_code != 200:
+        print(f'Error {method}ing {url}, retrying: {r.status_code} {r.text}')
+        time.sleep(1)
+    return r
+
 class OptimClient:
     def __init__(self, url):
         self.url = url
@@ -22,12 +29,10 @@ class OptimClient:
             "parameters": [asdict(p) for p in parameters],
             "objective": objective,
         }
-        r = requests.post(self.url + '/api/sweeps/', json=data)
-        if r.status_code != 200:
-            if 'detail' in r.json():
-                print(r.json()['detail']['message'])
-            raise Exception(r.json())
-        return SweepHandle(self, r.json()['id'])
+        r = req(self.url + '/api/sweeps/', 'POST', data=data)
+        r = r.json()
+        assert r['status'] == 'ok'
+        return SweepHandle(self, r['data'])
     
 @dataclass
 class SweepHandle:
@@ -38,36 +43,31 @@ class SweepHandle:
         if params is None:
             params = {}
         data = params
-        r = requests.post(self.client.url + '/api/sweeps/' + self.id + '/ask', json=data)
-        if r.status_code != 200:
-            raise Exception(r.json())
+        r = req(self.client.url + '/api/sweeps/' + self.id + '/ask', 'POST', data=data)
         r = r.json()
-        if r['status'] == 'error':
-            raise Exception(r['message'])
-        elif r['status'] == 'pending':
-            job_id = r['job_id']
-            print('Waiting for job to complete...', end='', flush=True)
-            while True:
-                r = requests.post(self.client.url + f'/api/poll/{job_id}')
-                if r.status_code != 200:
-                    print("Error while polling job status:", r)
-                    time.sleep(1)
-                    continue
-                r = r.json()
-                if r['status'] == 'success':
+        assert r['status'] == 'ok'
+        job_id = r['data']
+        print('Waiting for job to complete...', end='', flush=True)
+        while True:
+            r = req(self.client.url + f'/api/poll/{job_id}', 'POST')
+            r = r.json()
+            if r['status'] == 'ok':
+                task_info = r['data']
+                if task_info['status'] == 'done':
                     print()
-                    return r['result']
-                elif r['status'] == 'error':
-                    raise Exception(r['message'])
-                elif r['status'] in ('running', 'pending'):
+                    return task_info['result']
+                elif task_info['status'] == 'error':
+                    raise Exception(task_info['message'])
+                elif task_info['status'] in ('running', 'pending'):
                     print('.', end='', flush=True)
-                    time.sleep(1)
-                elif r['status'] == 'not found':
+            elif r['status'] == 'error':
+                if r['code'] == 'not_found':
                     # The server might have restarted, so we need to ask again.
-                    r = requests.post(self.client.url + '/api/sweeps/' + self.id + '/ask', json=data)
-                    if r.status_code == 200:
-                        job_id = r.json()['job_id']
-                        continue
+                    r = req(self.client.url + '/api/sweeps/' + self.id + '/ask', 'POST', data=data)
+                    r = r.json()
+                    assert r['status'] == 'ok'
+                    job_id = r['data']
+            time.sleep(1)
 
 
     def start(self, params: Dict[str, float]) -> Dict[str, float]:
@@ -75,12 +75,10 @@ class SweepHandle:
             "sweep_id": self.id,
             "parameters": params
         }
-        r = requests.post(self.client.url + f'/api/sweeps/{self.id}/trials/', json=data)
-        if r.status_code != 200:
-            if 'detail' in r.json():
-                print(r.json()['detail']['message'])
-            raise Exception(r.json())
-        return TrialHandle(self.client, self.id, r.json()['id'])
+        r = req(self.client.url + f'/api/sweeps/{self.id}/trials/', 'POST', data=data)
+        r = r.json()
+        assert r['status'] == 'ok'
+        return TrialHandle(self.client, self.id, r['data'])
 
 @dataclass
 class TrialHandle:
@@ -89,14 +87,9 @@ class TrialHandle:
     id: str
     def report(self, value: float):
         data = {'value': value}
-        r = requests.post(self.client.url + f'/api/sweeps/{self.sweep_id}/trials/{self.id}/report', json=data)
-        if r.status_code != 200:
-            if 'detail' in r.json():
-                print(r.json()['detail']['message'])
-            raise Exception(r.json())
-
-
-# 1 - gamma
+        r = req(self.client.url + f'/api/sweeps/{self.sweep_id}/trials/{self.id}/report', 'POST', data=data)
+        r = r.json()
+        assert r['status'] == 'ok'
 
 
 if __name__ == '__main__':
