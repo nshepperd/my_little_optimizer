@@ -51,7 +51,7 @@ class ApiResponse(BaseModel, Generic[T]):
     
     @classmethod
     def error(cls, message: str, code: str = None) -> ApiResponse[T]:
-        return cls(status='error', error=message, code=code)
+        return cls(status='error', message=message, code=code)
 
 class SweepCreate(BaseModel):
     name: str
@@ -171,7 +171,7 @@ async def sweep_get_slice_visualization(sweep_id: str, options: SliceVisualizati
         if len(results) == 0:
             return ApiResponse.error("sweep not found", code='not_found')
         if results[0]['num_trials'] == 0:
-            return ApiResponse.error("sweep has no trials", code='invalid')
+            return ApiResponse.error("sweep has no trials", code='no_data')
     res = manager.get_slice_visualization(sweep_id, options.param_name)
     return ApiResponse.ok(SliceVisualizationResponse(**res))
 

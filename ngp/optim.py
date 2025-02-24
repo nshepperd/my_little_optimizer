@@ -34,12 +34,14 @@ class SpaceItem:
     log: bool = False
 
     def normalize(self, x):
+        x = jnp.asarray(x)
         if self.log:
             x = jnp.log(x)
             return (x - jnp.log(self.min)) / (jnp.log(self.max) - jnp.log(self.min))
         return (x - self.min) / (self.max - self.min)
     
     def denormalize(self, x):
+        x = jnp.asarray(x)
         if self.log:
             return jnp.exp(x * (jnp.log(self.max) - jnp.log(self.min)) + jnp.log(self.min))
         return x * (self.max - self.min) + self.min
@@ -60,7 +62,7 @@ class Space:
     def normalize(self, params):
         return jnp.stack([self.items[k].normalize(params[k]) for k in self.keys], axis=-1)
     
-    def denormalize(self, array):
+    def denormalize(self, array: jax.Array):
         return {k:self.items[k].denormalize(array[..., i]) for i,k in enumerate(self.keys)}
 
 @dataclass

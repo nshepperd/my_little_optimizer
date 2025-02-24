@@ -61,6 +61,7 @@ export interface SliceVisualizationDatapoint {
   x: number;
   y_mean: number;
   y_std: number;
+  params: Record<string, number>;
 }
 
 export interface SliceVisualization {

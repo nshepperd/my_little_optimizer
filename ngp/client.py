@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import requests
 import json
 from typing import List, Dict
@@ -70,7 +72,7 @@ class SweepHandle:
             time.sleep(1)
 
 
-    def start(self, params: Dict[str, float]) -> Dict[str, float]:
+    def start(self, params: Dict[str, float]) -> TrialHandle:
         data = {
             "sweep_id": self.id,
             "parameters": params

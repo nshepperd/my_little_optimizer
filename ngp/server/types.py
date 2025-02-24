@@ -12,6 +12,7 @@ class SliceVisualizationDatapoint(BaseModel):
     x: float
     y_mean: float
     y_std: float
+    params: Dict[str, float]
 
 class SliceVisualization(BaseModel):
     sweep_id: str

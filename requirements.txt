@@ -9,3 +9,4 @@ jaxtorch
 jaxopt
 requests
 cachetools
+optuna

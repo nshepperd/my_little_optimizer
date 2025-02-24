@@ -276,10 +276,10 @@ class SliceVisualizationTask(Task):
         def pred(x):
             params = sweep.optim.suggestbest({param.name: x}, method='cma-es')
             mean, std = sweep.optim.fitted.predict(space.normalize(params)[None])
-            return mean.squeeze(), std.squeeze()
-        means, stds = jax.vmap(pred)(xs)
+            return mean.squeeze(), std.squeeze(), params
+        means, stds, params = jax.vmap(pred)(xs)
         computed_at = int(time.time())
-        datapoints = [SliceVisualizationDatapoint(x=x, y_mean=mean, y_std=std) for x,mean,std in zip(xs.tolist(), means.tolist(), stds.tolist())]
+        datapoints = [SliceVisualizationDatapoint(x=x, y_mean=mean, y_std=std, params = {k:v[i].item() for k,v in params.items()}) for i, (x,mean,std) in enumerate(zip(xs.tolist(), means.tolist(), stds.tolist()))]
         self.result = SliceVisualization(sweep_id=self.sweep_id, param_name=self.param_name, computed_at=computed_at, data=datapoints)
         self.manager.viz_cache[('slice', self.sweep_id, self.param_name)] = self.result
         self.status = 'done'

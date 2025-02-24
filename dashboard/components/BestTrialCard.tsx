@@ -34,7 +34,7 @@ const BestTrialCard = ({ results, objective = "min" }: BestTrialCardProps) => {
   if (bestTrial === null) {
     // Show a greyed out card for no results yet.
     return (
-      <Card>
+      <Card className="w-full h-full">
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>Best Trial</span>

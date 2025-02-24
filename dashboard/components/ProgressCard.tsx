@@ -33,7 +33,7 @@ const ProgressCard = ({ results, objective }: ProgressCardProps) => {
     );
   }
 
-  let bestTrials: TrialResult[] = [];
+  let bestTrials = [];
   let best: TrialResult | null = null;
   for (const result of results) {
     if (result.value === null) continue;
@@ -44,7 +44,7 @@ const ProgressCard = ({ results, objective }: ProgressCardProps) => {
     ) {
       best = result;
     }
-    bestTrials.push({ ...result, value: best.value });
+    bestTrials.push({ ...result, best_value: best.value });
   }
 
   return (
@@ -56,7 +56,9 @@ const ProgressCard = ({ results, objective }: ProgressCardProps) => {
         {bestTrials.length} trials so far.
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+            <ComposedChart margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                data={bestTrials}
+                >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis
                 dataKey="trial_number"
@@ -70,13 +72,13 @@ const ProgressCard = ({ results, objective }: ProgressCardProps) => {
                   angle: -90,
                   position: "insideLeft",
                 }}
+                domain={["auto", "auto"]}
               />
               <Tooltip animationDuration={0} />
               <Line
                 name="Best so far"
                 type="stepAfter"
-                data={bestTrials}
-                dataKey="value"
+                dataKey="best_value"
                 key="best"
                 stroke="#2563eb"
                 dot={false}
@@ -84,7 +86,6 @@ const ProgressCard = ({ results, objective }: ProgressCardProps) => {
               />
               <Scatter
                 name="Trial results"
-                data={results}
                 dataKey="value"
                 key="results"
                 fill="#6366f1"
