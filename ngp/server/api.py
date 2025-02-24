@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Literal
 import sqlite3
 import json
 from datetime import datetime
-import uuid
+from uuid import UUID
 from contextlib import contextmanager, asynccontextmanager
 import threading
 from dataclasses import dataclass, asdict
@@ -37,7 +39,19 @@ app = FastAPI(
 class SweepCreate(BaseModel):
     name: str
     parameters: List[SweepSpaceItem]
+    objective: Literal['min', 'max'] = 'min'
 
+class SweepParamType(BaseModel):
+    min: float
+    max: float
+    log: bool
+
+class SweepGetResponse(BaseModel):
+    id: str
+    name: str
+    parameters: Dict[str, SweepParamType]
+    status: str
+    created_at: int
 
 def todict(xs):
     if isinstance(xs, list):
@@ -49,7 +63,7 @@ def todict(xs):
 # API Routes
 @app.post("/api/sweeps/")
 async def sweep_create(sweep: SweepCreate):
-    sweep_id = manager.create_sweep(sweep.name, sweep.parameters)
+    sweep_id = manager.create_sweep(sweep.name, sweep.parameters, sweep.objective)
     return {'status': 'success', 'id': sweep_id}
 
 
@@ -77,32 +91,51 @@ async def sweep_delete(sweep_id: str):
 
 
 @app.get("/api/sweeps/")
-async def sweep_list():
+async def sweep_list() -> List[SweepGetResponse]:
     with manager.db.get_cursor() as c:
         c.execute("SELECT id, name, parameters, status, created_at FROM sweeps")
         results = c.fetchall()
-        return {'status': 'success',
-                'sweeps': [
-            {
-                "id": id,
-                "name": name,
-                "parameters": json.loads(parameters),
-                "status": status,
-                "created_at": created_at,
-            }
-            for (id, name, parameters, status, created_at) in results
-        ]}
+        res = []
+        for r in results:
+            res.append(SweepGetResponse(
+                id=r['id'],
+                name=r['name'],
+                parameters={p['name']: SweepParamType(min=p['min'], max=p['max'], log=p['log']) for p in json.loads(r['parameters'])},
+                status=r['status'],
+                created_at=r['created_at'],
+            ))
+        return res
+        # r['parameters'] = [SpaceItem(**p) for p in json.loads(parameters)]
+        # return [SweepGetResponse(**r) for r in results]
+
+@app.post("/api/poll/{job_id}")
+async def poll_job(job_id: UUID):
+    if job_id not in manager.tasks:
+        raise HTTPException(status_code=404, detail="job not found")
+    
+    status = manager.tasks[job_id].status
+    if status == 'pending':
+        return {'status': 'pending'}
+    elif status == 'running':
+        return {'status': 'running'}
+    elif status == 'done':
+        return {'status': 'success', 'result': manager.tasks[job_id].result}
+    elif status == 'error':
+        return {'status': 'error', 'message': manager.tasks[job_id].message}
+    else:
+        raise HTTPException(status_code=500, detail={'status': status, 'message': 'unknown status'})
 
 
 @app.post("/api/sweeps/{sweep_id}/ask")
 async def sweep_ask(sweep_id: str, parameters: Dict[str, float] = None):
     job_id = manager.ask_params(sweep_id, parameters)
-    manager.job_queue.join()
-    task = manager.tasks[job_id]
-    if task.status == 'done':
-        return {'status': 'success', 'params': task.result}
-    else:
-        raise HTTPException(status_code=500, detail={'status': task.status, 'message': task.message})
+    return {'status': 'pending', 'job_id': job_id}
+    # manager.job_queue.join()
+    # task = manager.tasks[job_id]
+    # if task.status == 'done':
+    #     return {'status': 'success', 'params': task.result}
+    # else:
+    #     raise HTTPException(status_code=500, detail={'status': task.status, 'message': task.message})
 
 class ExperimentCreate(BaseModel):
     parameters: Dict[str, float]
@@ -119,17 +152,42 @@ async def report_result(sweep_id: str, experiment_id: str, result: Dict[str, flo
     manager.report_result(sweep_id, experiment_id, result['value'])
     return {'status': 'success'}
 
+class SweepGetExperimentsResponse(BaseModel):
+    id: str
+    parameters: Dict[str, float]
+    value: float
+    status: str
+    created_at: int
+    completed_at: Optional[int]
 
-@app.get("/api/sweeps/{sweep_id}/results")
-async def get_sweep_results(sweep_id: str):
-    sweep = manager.sweeps[sweep_id]
-    results = []
-    for experiment in sweep.experiments.values():
-        results.append({
-            "parameters": experiment.parameters,
-            "value": experiment.value,
-            "status": experiment.status,
-            "created_at": experiment.created_at,
-            "completed_at": experiment.completed_at
-        })
-    return {'status': 'success', 'results': results}
+@app.get("/api/sweeps/{sweep_id}/experiments/")
+async def sweep_get_experiments(sweep_id: str) -> List[SweepGetExperimentsResponse]:
+    with manager.db.get_cursor() as c:
+        c.execute("SELECT id, parameters, value, status, created_at, completed_at FROM experiments WHERE sweep_id = ?", (sweep_id,))
+        results = c.fetchall()
+        res = []
+        for r in results:
+            res.append(SweepGetExperimentsResponse(
+                id=r['id'],
+                parameters=json.loads(r['parameters']),
+                value=r['value'],
+                status=r['status'],
+                created_at=r['created_at'],
+                completed_at=r['completed_at'],
+            ))
+        return res
+
+@app.get("/api/sweeps/{sweep_id}")
+async def sweep_get() -> SweepGetResponse:
+    with manager.db.get_cursor() as c:
+        c.execute("SELECT id, name, parameters, status, created_at FROM sweeps WHERE id = ?", (sweep_id,))
+        if c.rowcount == 0:
+            raise HTTPException(status_code=404, detail="sweep not found")
+        results = c.fetchall()
+        return SweepGetResponse(
+            id=results[0]['id'],
+            name=results[0]['name'],
+            parameters={p['name']: SweepParamType(min=p['min'], max=p['max'], log=p['log']) for p in json.loads(results[0]['parameters'])},
+            status=results[0]['status'],
+            created_at=results[0]['created_at'],
+        )

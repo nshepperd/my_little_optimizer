@@ -216,7 +216,9 @@ class Optim:
         if self.fitted is None:
             # just choose random points
             v = jax.random.uniform(self.rng.split(), [self.space.n], minval=0.0, maxval=1.0)
-            return self.space.denormalize(v)
+            ret = self.space.denormalize(v)
+            ret.update(params)
+            return ret
 
         if self.heuristic == 'lcb':
             if self.objective == 'min':

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pydantic import BaseModel
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Literal
 import time
 import uuid
 from uuid import UUID
@@ -70,11 +70,11 @@ class SweepManager:
         init_db(self.db)
 
         with self.db.get_cursor() as c:
-            c.execute("SELECT id, parameters FROM sweeps")
+            c.execute("SELECT id, parameters, objective FROM sweeps")
             results = c.fetchall()
             self.sweeps = {id:
-                SweepInfo(id=id, optim=Optim([SpaceItem(**p) for p in json.loads(parameters)]), experiments={})
-                for (id, parameters) in results
+                SweepInfo(id=id, optim=Optim([SpaceItem(**p) for p in json.loads(parameters)], objective=objective), experiments={})
+                for (id, parameters, objective) in results
             }
 
         self.job_queue = Queue()
@@ -117,22 +117,23 @@ class SweepManager:
     def close(self):
         self.db.close()
 
-    def create_sweep(self, name: str, parameters: List[SweepSpaceItem]):
+    def create_sweep(self, name: str, parameters: List[SweepSpaceItem], objective: Literal['min', 'max'] = 'min'):
         sweep_id = str(uuid.uuid4())
 
         with self.db.get_cursor() as c:
             c.execute(
-                "INSERT INTO sweeps (id, name, parameters, status, created_at) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO sweeps (id, name, parameters, objective, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     sweep_id,
                     name,
                     json.dumps(todict(parameters)),
+                    objective,
                     "active",
                     int(time.time()),
                 ),
             )
         
-        self.sweeps[sweep_id] = SweepInfo(id=sweep_id, optim=Optim([SpaceItem(**todict(p)) for p in parameters]), experiments={})
+        self.sweeps[sweep_id] = SweepInfo(id=sweep_id, optim=Optim([SpaceItem(**todict(p)) for p in parameters], objective=objective), experiments={})
 
         return sweep_id
 
@@ -178,7 +179,7 @@ class SweepManager:
                 """UPDATE experiments 
                 SET value = ?, status = ?, completed_at = ?
                 WHERE sweep_id = ? AND id = ?""",
-                (value, "completed", completed_at, sweep_id, experiment_id),
+                (value, "complete", completed_at, sweep_id, experiment_id),
             )
         self.sweeps[sweep_id].updated_at = int(time.time())
         self.schedule(InferTask(self, sweep_id))
@@ -208,14 +209,14 @@ class InferTask(Task):
         with self.manager.db.get_cursor() as c:
             c.execute("SELECT id, parameters, value, status, created_at, completed_at FROM experiments WHERE sweep_id = ?", (sweep.id,))
             results = c.fetchall()
-            sweep.optim.trials = [Trial(params=json.loads(parameters), value=value) for (id, parameters, value, status, created_at, completed_at) in results if status == 'completed']
+            sweep.optim.trials = [Trial(params=json.loads(parameters), value=value) for (id, parameters, value, status, created_at, completed_at) in results if status == 'complete']
         print('trials:', len(sweep.optim.trials))
         if len(sweep.optim.trials) > 0:
             sweep.optim.infer()
         sweep.inferred_at = int(time.time())
         self.status = 'done'
 
-class AskTask:
+class AskTask(Task):
     def __init__(self, manager: SweepManager, sweep_id: str, params: Dict[str, float]):
         self.manager = manager
         self.sweep_id = sweep_id
@@ -226,7 +227,7 @@ class AskTask:
         print('Starting task', self.id)
         self.status = 'running'
         sweep = self.manager.sweeps[self.sweep_id]
-        if sweep.inferred_at < sweep.updated_at:
+        if sweep.inferred_at <= sweep.updated_at:
             InferTask(self.manager, self.sweep_id)()
         ps = sweep.optim.suggest(self.params)
         self.result = {k: float(v) for (k,v) in ps.items()}
@@ -241,6 +242,7 @@ def init_db(db: Database):
                 id TEXT PRIMARY KEY,
                 name TEXT,
                 parameters JSON,
+                objective TEXT,
                 status TEXT,
                 created_at TIMESTAMP
             )

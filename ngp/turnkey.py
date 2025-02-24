@@ -25,8 +25,6 @@ from ngp.adapt import warmup_with_dual_averaging, find_reasonable_epsilon
 from ngp.ahmc import ahmc_fast, sample_hmc
 from ngp.util import Fn, Partial
 
-import optuna
-
 @jax.tree_util.register_static
 @dataclass
 class TrivialMetric(Metric):
