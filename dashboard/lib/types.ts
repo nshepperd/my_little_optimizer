@@ -53,6 +53,28 @@ export interface TrialReportRequest {
   value: number;
 }
 
+export interface SliceVisualizationRequest {
+  param_name: string;
+}
+
+export interface SliceVisualizationDatapoint {
+  x: number;
+  y_mean: number;
+  y_std: number;
+}
+
+export interface SliceVisualization {
+  sweep_id: string;
+  param_name: string;
+  computed_at: number;
+  data: SliceVisualizationDatapoint[];
+}
+
+export interface SliceVisualizationResponse {
+  cached: SliceVisualization | null;
+  job_id: string | null;
+}
+
 export interface ApiResponse<T> {
   status: 'ok' | 'error';
   data: T;

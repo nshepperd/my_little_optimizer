@@ -43,6 +43,9 @@ class SpaceItem:
         if self.log:
             return jnp.exp(x * (jnp.log(self.max) - jnp.log(self.min)) + jnp.log(self.min))
         return x * (self.max - self.min) + self.min
+    
+    def linspace(self, n):
+        return self.denormalize(jnp.linspace(self.normalize(self.min), self.normalize(self.max), n))
 
 
 @dataclass

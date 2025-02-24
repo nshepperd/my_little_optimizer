@@ -94,17 +94,18 @@ class TrialHandle:
 
 if __name__ == '__main__':
     client = OptimClient('http://localhost:8000')
-    sweep = client.new_sweep('test_random_y', [SpaceItem('x', -1, 1),
+    sweep = client.new_sweep('test_xy_complex', [SpaceItem('x', -1, 1),
                                                 SpaceItem('y', -1, 1)
                                                 ], objective='min')
     print('id:', sweep.id)
     # sweep = client.get_sweep('test_random_y')
     for i in range(20):
-        y = float(np.random.uniform(-1, 1))
-        params = sweep.ask({'y':y})
+        # y = float(np.random.uniform(-1, 1))
+        params = sweep.ask()
         trial = sweep.start(params)
         x = params['x']
-        value = float((x-y)**2 + 1)
+        y = params['y']
+        value = float(x**2 + (x-y)**2 + 1)
         trial.report(value)
         print(params, value)
         time.sleep(1)

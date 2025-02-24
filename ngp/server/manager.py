@@ -1,20 +1,22 @@
 from __future__ import annotations
 
 from pydantic import BaseModel
-from typing import List, Dict, Optional, Any, Literal
+from typing import List, Dict, Optional, Any, Literal, Tuple
 import time
 import uuid
 from uuid import UUID
-import sqlite3
 from contextlib import contextmanager, asynccontextmanager
 from threading import Thread
 from queue import Queue
 from dataclasses import dataclass, asdict
 import json
 import traceback
+from cachetools import TTLCache
+import jax
 
 from ngp.server.database import Database
 from ngp.optim import Optim, SpaceItem, Trial
+from ngp.server.types import SweepSpaceItem, SliceVisualization, SliceVisualizationDatapoint
 
 # class Task:
 #     id: str
@@ -30,15 +32,10 @@ from ngp.optim import Optim, SpaceItem, Trial
 def todict(xs):
     if isinstance(xs, list):
         return [todict(x) for x in xs]
+    elif isinstance(xs, BaseModel):
+        return xs.__dict__
     else:
         return asdict(xs)
-
-@dataclass
-class SweepSpaceItem(BaseModel):
-    name: str
-    min: float
-    max: float
-    log: bool = False
 
 @dataclass
 class SweepInfo:
@@ -64,6 +61,7 @@ class SweepManager:
     job_queue: Queue
     job_thread: Thread
     tasks: Dict[UUID, Task]
+    viz_cache: TTLCache
 
     def __init__(self):
         self.db = Database()
@@ -77,6 +75,7 @@ class SweepManager:
                 for (id, parameters, objective) in results
             }
 
+        self.viz_cache = TTLCache(maxsize=100, ttl=60*60)
         self.job_queue = Queue()
         self.tasks = {}
         self.job_thread = Thread(target=self.job_worker, daemon=True)
@@ -104,6 +103,7 @@ class SweepManager:
             except Exception as e:
                 job.status = 'error'
                 job.message = f'{type(e)}: {str(e)}\n{traceback.format_exc()}'
+                print('Error running job', job.id, job.message)
             self.job_queue.task_done()
 
     def schedule(self, task: Task):
@@ -196,6 +196,22 @@ class SweepManager:
         print('Asking for params, sweep_id:', sweep_id, 'params:', params)
         return self.schedule(AskTask(self, sweep_id, params))
 
+    def get_slice_visualization(self, sweep_id: str, param_name: str):
+        cached: SliceVisualization = None
+        if ('slice', sweep_id, param_name) in self.viz_cache:
+            cached = self.viz_cache[('slice', sweep_id, param_name)]
+        
+        if cached and cached.computed_at >= self.sweeps[sweep_id].updated_at:
+            return {'cached': cached, 'job_id': None}
+        elif cached:
+            job_id = self.schedule(SliceVisualizationTask(self, sweep_id, param_name))
+            return {'cached': cached, 'job_id': job_id}
+        else:
+            job_id = self.schedule(SliceVisualizationTask(self, sweep_id, param_name))
+            return {'cached': None, 'job_id': job_id}
+
+
+        
 class Task:
     status: str = 'pending'
     message: str = ''
@@ -240,6 +256,36 @@ class AskTask(Task):
         ps = sweep.optim.suggest(self.params)
         self.result = {k: float(v) for (k,v) in ps.items()}
         self.status = 'done'
+
+class SliceVisualizationTask(Task):
+    def __init__(self, manager: SweepManager, sweep_id: str, param_name: str):
+        self.manager = manager
+        self.sweep_id = sweep_id
+        self.param_name = param_name
+        self.result = None
+    
+    def __call__(self):
+        print('Starting slice visualization task', self.id)
+        self.status = 'running'
+        sweep = self.manager.sweeps[self.sweep_id]
+        if sweep.inferred_at <= sweep.updated_at:
+            InferTask(self.manager, self.sweep_id)()
+        space = sweep.optim.space
+        param = space.items[self.param_name]
+        xs = param.linspace(100)
+        def pred(x):
+            params = sweep.optim.suggestbest({param.name: x}, method='cma-es')
+            mean, std = sweep.optim.fitted.predict(space.normalize(params)[None])
+            return mean.squeeze(), std.squeeze()
+        means, stds = jax.vmap(pred)(xs)
+        computed_at = int(time.time())
+        datapoints = [SliceVisualizationDatapoint(x=x, y_mean=mean, y_std=std) for x,mean,std in zip(xs.tolist(), means.tolist(), stds.tolist())]
+        self.result = SliceVisualization(sweep_id=self.sweep_id, param_name=self.param_name, computed_at=computed_at, data=datapoints)
+        self.manager.viz_cache[('slice', self.sweep_id, self.param_name)] = self.result
+        self.status = 'done'
+        print('Finished slice visualization task', self.id)
+
+        
 
 
 def init_db(db: Database):

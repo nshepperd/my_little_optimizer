@@ -24,6 +24,7 @@ import BestTrialCard from "./BestTrialCard";
 import ProgressCard from "./ProgressCard";
 import TrialListCard from "./TrialListCard";
 import { TrialResult, Sweep, ApiResponse } from "@/lib/types";
+import SliceVisualizationCard from "./SliceVisualizationCard";
 
 const SweepDashboard = () => {
   const [sweeps, setSweeps] = useState<Sweep[]>([]);
@@ -246,6 +247,8 @@ const SweepDashboard = () => {
                 />
               </div>
             </div>
+
+            <SliceVisualizationCard sweep={selectedSweep} />
 
             {/* Results Table */}
             <TrialListCard results={results} />

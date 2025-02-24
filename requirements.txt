@@ -8,3 +8,4 @@ einops
 jaxtorch
 jaxopt
 requests
+cachetools

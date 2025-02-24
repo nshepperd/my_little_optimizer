@@ -12,7 +12,8 @@ import threading
 from dataclasses import dataclass, asdict
 import time
 
-from ngp.server.manager import SweepManager, SweepSpaceItem
+from ngp.server.manager import SweepManager
+from ngp.server.types import SweepSpaceItem, SliceVisualization, SliceVisualizationDatapoint
 
 
 manager: SweepManager = None
@@ -80,6 +81,12 @@ class SweepGetTrialsResponse(BaseModel):
     completed_at: Optional[int]
     trial_number: int
 
+class SliceVisualizationRequest(BaseModel):
+    param_name: str
+class SliceVisualizationResponse(BaseModel):
+    cached: Optional[SliceVisualization]
+    job_id: Optional[UUID]
+
 def todict(xs):
     if isinstance(xs, list):
         return [todict(x) for x in xs]
@@ -88,6 +95,8 @@ def todict(xs):
 
 
 # API Routes
+
+
 @app.post("/api/sweeps/")
 async def sweep_create(sweep: SweepCreate) -> ApiResponse[str]:
     sweep_id = manager.create_sweep(sweep.name, sweep.parameters, sweep.objective)
@@ -153,6 +162,12 @@ async def poll_job(job_id: UUID) -> ApiResponse[Dict[str, Any]]:
 async def sweep_ask(sweep_id: str, parameters: Dict[str, float] = None) -> ApiResponse[UUID]:
     job_id = manager.ask_params(sweep_id, parameters)
     return ApiResponse.ok(job_id)
+
+@app.post("/api/sweeps/{sweep_id}/visualize/slice")
+async def sweep_get_slice_visualization(sweep_id: str, options: SliceVisualizationRequest) -> ApiResponse[SliceVisualizationResponse]:
+    res = manager.get_slice_visualization(sweep_id, options.param_name)
+    return ApiResponse.ok(SliceVisualizationResponse(**res))
+
 
 class TrialCreate(BaseModel):
     parameters: Dict[str, float]
