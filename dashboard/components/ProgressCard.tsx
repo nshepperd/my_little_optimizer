@@ -7,15 +7,19 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Scatter,
+  ComposedChart,
+  Legend,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ExperimentResult } from "@/lib/types";
+import { TrialResult, OptimizationObjective } from "@/lib/types";
 
 interface ProgressCardProps {
-  results: ExperimentResult[];
+  results: TrialResult[];
+  objective: OptimizationObjective;
 }
 
-const ProgressCard = ({ results }: ProgressCardProps) => {
+const ProgressCard = ({ results, objective }: ProgressCardProps) => {
   if (!results || results.length === 0) {
     return (
       <Card>
@@ -29,38 +33,65 @@ const ProgressCard = ({ results }: ProgressCardProps) => {
     );
   }
 
+  let bestTrials: TrialResult[] = [];
+  let best: TrialResult | null = null;
+  for (const result of results) {
+    if (result.value === null) continue;
+    if (
+      best === null ||
+      (objective === "min" && result.value < best.value) ||
+      (objective === "max" && result.value > best.value)
+    ) {
+      best = result;
+    }
+    bestTrials.push({ ...result, value: best.value });
+  }
+
   return (
     <Card className="mb-6">
       <CardHeader>
         <CardTitle>Optimization Progress</CardTitle>
       </CardHeader>
       <CardContent>
+        {bestTrials.length} trials so far.
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={results}
-              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-            >
+            <ComposedChart margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis
-                dataKey="index"
-                label={{ value: "Experiment Number", position: "bottom" }}
+                dataKey="trial_number"
+                type="number"
+                label={{ value: "Trial Number", position: "bottom" }}
               />
               <YAxis
+                dataKey="value"
                 label={{
                   value: "Value",
                   angle: -90,
                   position: "insideLeft",
                 }}
               />
-              <Tooltip />
+              <Tooltip animationDuration={0} />
               <Line
-                type="monotone"
+                name="Best so far"
+                type="stepAfter"
+                data={bestTrials}
                 dataKey="value"
-                stroke="#8884d8"
-                dot={{ r: 4 }}
+                key="best"
+                stroke="#2563eb"
+                dot={false}
+                isAnimationActive={false}
               />
-            </LineChart>
+              <Scatter
+                name="Trial results"
+                data={results}
+                dataKey="value"
+                key="results"
+                fill="#6366f1"
+                isAnimationActive={false}
+                stroke="#8884d8"
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </CardContent>

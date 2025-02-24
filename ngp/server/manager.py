@@ -44,12 +44,12 @@ class SweepSpaceItem(BaseModel):
 class SweepInfo:
     id: str
     optim: Optim
-    experiments: Dict[str, ExperimentInfo]
+    trials: Dict[str, TrialInfo]
     updated_at: int = 0
     inferred_at: int = 0
 
 @dataclass
-class ExperimentInfo:
+class TrialInfo:
     id: str
     sweep_id: str
     parameters: Dict[str, float]
@@ -73,7 +73,7 @@ class SweepManager:
             c.execute("SELECT id, parameters, objective FROM sweeps")
             results = c.fetchall()
             self.sweeps = {id:
-                SweepInfo(id=id, optim=Optim([SpaceItem(**p) for p in json.loads(parameters)], objective=objective), experiments={})
+                SweepInfo(id=id, optim=Optim([SpaceItem(**p) for p in json.loads(parameters)], objective=objective), trials={})
                 for (id, parameters, objective) in results
             }
 
@@ -84,11 +84,11 @@ class SweepManager:
 
         # for sweep in self.sweeps.values():
         #     with self.db.get_cursor() as c:
-        #         c.execute("SELECT id, parameters, value, status, created_at, completed_at FROM experiments WHERE sweep_id = ?", (sweep.id,))
+        #         c.execute("SELECT id, parameters, value, status, created_at, completed_at FROM trials WHERE sweep_id = ?", (sweep.id,))
         #         results = c.fetchall()
         #         sweep = self.sweeps[sweep.id]
         #         sweep.optim.trials = [Trial(params=json.loads(parameters), value=value) for (id, parameters, value, status, created_at, completed_at) in results if value is not None]
-        #         sweep.experiments = {id: ExperimentInfo(id=id, sweep_id=sweep.id, parameters=json.loads(parameters), value=value, status=status, created_at=created_at, completed_at=completed_at)
+        #         sweep.trials = {id: TrialInfo(id=id, sweep_id=sweep.id, parameters=json.loads(parameters), value=value, status=status, created_at=created_at, completed_at=completed_at)
         #                              for (id, parameters, value, status, created_at, completed_at) in results}
         #         if results:
         #             sweep.last_report = max([0] + [completed_at for (id, parameters, value, status, created_at, completed_at) in results if completed_at is not None])
@@ -133,7 +133,7 @@ class SweepManager:
                 ),
             )
         
-        self.sweeps[sweep_id] = SweepInfo(id=sweep_id, optim=Optim([SpaceItem(**todict(p)) for p in parameters], objective=objective), experiments={})
+        self.sweeps[sweep_id] = SweepInfo(id=sweep_id, optim=Optim([SpaceItem(**todict(p)) for p in parameters], objective=objective), trials={})
 
         return sweep_id
 
@@ -144,7 +144,7 @@ class SweepManager:
                 query = "UPDATE sweeps SET name = ? WHERE id = ?"
                 c.execute(query, [name, sweep_id])
 
-    def create_experiment(self, sweep_id: str, parameters: Dict[str, float], value: Optional[float]):
+    def create_trial(self, sweep_id: str, parameters: Dict[str, float], value: Optional[float]):
         id = str(uuid.uuid4())
         created_at = int(time.time())
         if value is None:
@@ -155,9 +155,16 @@ class SweepManager:
             completed_at = created_at
 
         with self.db.get_cursor() as c:
+            # Atomically increment and get the trial number
             c.execute(
-                """INSERT INTO experiments (id, sweep_id, parameters, value, status, created_at, completed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                "UPDATE sweeps SET num_trials = num_trials + 1 WHERE id = ? RETURNING num_trials",
+                [sweep_id]
+            )
+            trial_number = c.fetchone()['num_trials']
+
+            c.execute(
+                """INSERT INTO trials (id, sweep_id, parameters, value, status, created_at, completed_at, trial_number)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     id,
                     sweep_id,
@@ -166,20 +173,21 @@ class SweepManager:
                     status,
                     created_at,
                     completed_at,
+                    trial_number,
                 ),
             )
         
-        # self.sweeps[sweep_id].experiments[id] = ExperimentInfo(id=id, sweep_id=sweep_id, parameters=parameters, value=value, status=status, created_at=created_at, completed_at=completed_at)
+        # self.sweeps[sweep_id].trials[id] = TrialInfo(id=id, sweep_id=sweep_id, parameters=parameters, value=value, status=status, created_at=created_at, completed_at=completed_at)
         return id
 
-    def report_result(self, sweep_id: str, experiment_id: str, value: float):
+    def report_result(self, sweep_id: str, trial_id: str, value: float):
         completed_at = int(time.time())
         with self.db.get_cursor() as c:
             c.execute(
-                """UPDATE experiments 
+                """UPDATE trials 
                 SET value = ?, status = ?, completed_at = ?
                 WHERE sweep_id = ? AND id = ?""",
-                (value, "complete", completed_at, sweep_id, experiment_id),
+                (value, "complete", completed_at, sweep_id, trial_id),
             )
         self.sweeps[sweep_id].updated_at = int(time.time())
         self.schedule(InferTask(self, sweep_id))
@@ -207,7 +215,7 @@ class InferTask(Task):
         if sweep.inferred_at > sweep.updated_at:
             return
         with self.manager.db.get_cursor() as c:
-            c.execute("SELECT id, parameters, value, status, created_at, completed_at FROM experiments WHERE sweep_id = ?", (sweep.id,))
+            c.execute("SELECT id, parameters, value, status, created_at, completed_at FROM trials WHERE sweep_id = ?", (sweep.id,))
             results = c.fetchall()
             sweep.optim.trials = [Trial(params=json.loads(parameters), value=value) for (id, parameters, value, status, created_at, completed_at) in results if status == 'complete']
         print('trials:', len(sweep.optim.trials))
@@ -244,13 +252,14 @@ def init_db(db: Database):
                 parameters JSON,
                 objective TEXT,
                 status TEXT,
-                created_at TIMESTAMP
+                created_at TIMESTAMP,
+                num_trials INTEGER DEFAULT 0
             )
         """
         )
         c.execute(
             """
-            CREATE TABLE IF NOT EXISTS experiments (
+            CREATE TABLE IF NOT EXISTS trials (
                 id TEXT PRIMARY KEY,
                 sweep_id TEXT,
                 parameters JSON,
@@ -258,6 +267,7 @@ def init_db(db: Database):
                 status TEXT,
                 created_at TIMESTAMP,
                 completed_at TIMESTAMP,
+                trial_number INTEGER NOT NULL,
                 FOREIGN KEY (sweep_id) REFERENCES sweeps (id)
             )
         """

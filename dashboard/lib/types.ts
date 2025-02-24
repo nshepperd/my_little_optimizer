@@ -15,15 +15,17 @@ export interface Sweep {
   status: string;
   created_at: number;
   objective: OptimizationObjective;
+  num_trials: number;
 }
 
-export interface ExperimentResult {
+export interface TrialResult {
   id: string;
   parameters: Record<string, number>;
   value: number;
   status: string;
   created_at: number;
   completed_at: number | null;
+  trial_number: number;
 }
 
 // Request/Response types
@@ -42,11 +44,11 @@ export interface SweepUpdateRequest {
   name?: string;
 }
 
-export interface ExperimentCreateRequest {
+export interface TrialCreateRequest {
   parameters: Record<string, number>;
   value?: number;
 }
 
-export interface ExperimentReportRequest {
+export interface TrialReportRequest {
   value: number;
 }

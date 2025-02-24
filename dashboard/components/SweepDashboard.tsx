@@ -15,21 +15,25 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { useInterval } from "@/lib/useInterval";
 import { Toaster } from "sonner";
 
 import BestTrialCard from "./BestTrialCard";
 import ProgressCard from "./ProgressCard";
-import ExperimentListCard from "./ExperimentListCard";
-import { ExperimentResult, Sweep } from "@/lib/types";
+import TrialListCard from "./TrialListCard";
+import { TrialResult, Sweep } from "@/lib/types";
 
 const SweepDashboard = () => {
   const [sweeps, setSweeps] = useState<Sweep[]>([]);
   const [selectedSweep, setSelectedSweep] = useState<Sweep | null>(null);
-  const [results, setResults] = useState<ExperimentResult[]>([]);
+  const [results, setResults] = useState<TrialResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [sweepToRename, setSweepToRename] = useState<Sweep | null>(null);
   const [newName, setNewName] = useState("");
+  const [autoRefresh, setAutoRefresh] = useState(false);
 
   useEffect(() => {
     fetchSweeps();
@@ -45,33 +49,47 @@ const SweepDashboard = () => {
     }
   };
 
-  useEffect(() => {
-    const fetchResults = async () => {
-      if (!selectedSweep) return;
+  const fetchResults = async () => {
+    if (!selectedSweep) return;
 
-      try {
-        setLoading(true);
-        const response = await fetch(
-          `/api/sweeps/${selectedSweep.id}/experiments`
-        );
-        const data: ExperimentResult[] = await response.json();
-        const sortedData = data
-          .sort((a, b) => a.created_at - b.created_at)
-          .map((result, index) => ({
-            ...result,
-            index: index + 1,
-          }));
-        setResults(sortedData);
-      } catch (error) {
-        console.error("Error fetching results:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/sweeps/${selectedSweep.id}/trials`);
+      const data: TrialResult[] = await response.json();
+      const sortedData = data
+        .sort((a, b) => a.created_at - b.created_at)
+        .map((result, index) => ({
+          ...result,
+          index: index + 1,
+        }));
+      setResults(sortedData);
+    } catch (error) {
+      console.error("Error fetching results:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchResults();
   }, [selectedSweep]);
 
-  const handleDelete = async (sweep: Sweep, e: React.MouseEvent<HTMLElement>) => {
+  // Use the interval hook to periodically fetch data
+  const REFRESH_INTERVAL = 5000;
+  useInterval(
+    () => {
+      fetchSweeps();
+      if (selectedSweep) {
+        fetchResults();
+      }
+    },
+    autoRefresh ? REFRESH_INTERVAL : null
+  );
+
+  const handleDelete = async (
+    sweep: Sweep,
+    e: React.MouseEvent<HTMLElement>
+  ) => {
     e.stopPropagation(); // Prevent sweep selection when clicking menu
 
     if (!confirm(`Are you sure you want to delete sweep "${sweep.name}"?`)) {
@@ -142,6 +160,16 @@ const SweepDashboard = () => {
       {/* Sidebar */}
       <div className="w-64 bg-gray-100 p-4 border-r">
         <h2 className="text-xl font-bold mb-4">Sweeps</h2>
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={autoRefresh}
+            onCheckedChange={setAutoRefresh}
+            id="auto-refresh"
+          />
+          <Label htmlFor="auto-refresh" className="text-sm">
+            Auto-refresh
+          </Label>
+        </div>
         <div className="space-y-2">
           {sweeps.map((sweep) => (
             <div
@@ -206,12 +234,15 @@ const SweepDashboard = () => {
 
               {/* Results Chart */}
               <div className="w-2/3">
-                <ProgressCard results={results} />
+                <ProgressCard
+                  results={results}
+                  objective={selectedSweep.objective}
+                />
               </div>
             </div>
 
             {/* Results Table */}
-            <ExperimentListCard results={results} />
+            <TrialListCard results={results} />
           </>
         ) : (
           <div className="text-center text-gray-500 mt-10">

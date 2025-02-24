@@ -75,21 +75,21 @@ class SweepHandle:
             "sweep_id": self.id,
             "parameters": params
         }
-        r = requests.post(self.client.url + f'/api/sweeps/{self.id}/experiments/', json=data)
+        r = requests.post(self.client.url + f'/api/sweeps/{self.id}/trials/', json=data)
         if r.status_code != 200:
             if 'detail' in r.json():
                 print(r.json()['detail']['message'])
             raise Exception(r.json())
-        return ExperimentHandle(self.client, self.id, r.json()['id'])
+        return TrialHandle(self.client, self.id, r.json()['id'])
 
 @dataclass
-class ExperimentHandle:
+class TrialHandle:
     client: OptimClient
     sweep_id: str
     id: str
     def report(self, value: float):
         data = {'value': value}
-        r = requests.post(self.client.url + f'/api/sweeps/{self.sweep_id}/experiments/{self.id}/report', json=data)
+        r = requests.post(self.client.url + f'/api/sweeps/{self.sweep_id}/trials/{self.id}/report', json=data)
         if r.status_code != 200:
             if 'detail' in r.json():
                 print(r.json()['detail']['message'])
@@ -109,10 +109,10 @@ if __name__ == '__main__':
     for i in range(20):
         y = float(np.random.uniform(-1, 1))
         params = sweep.ask({'y':y})
-        experiment = sweep.start(params)
+        trial = sweep.start(params)
         x = params['x']
         value = float((x-y)**2 + 1)
-        experiment.report(value)
+        trial.report(value)
         print(params, value)
         time.sleep(1)
     

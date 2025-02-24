@@ -53,7 +53,7 @@ if __name__ == '__main__':
     opt.fitted = FittedMLP(opt.model.model, chains)
 
     # params = opt.suggest({})
-    # print('Suggested params for next experiment:', params)
+    # print('Suggested params for next trial:', params)
     params = opt.suggestbest({})
     print('Suggested best params:', params)
 

@@ -52,6 +52,17 @@ class SweepGetResponse(BaseModel):
     parameters: Dict[str, SweepParamType]
     status: str
     created_at: int
+    objective: Literal['min', 'max']
+    num_trials: int
+
+class SweepGetTrialsResponse(BaseModel):
+    id: str
+    parameters: Dict[str, float]
+    value: Optional[float]
+    status: str
+    created_at: int
+    completed_at: Optional[int]
+    trial_number: int
 
 def todict(xs):
     if isinstance(xs, list):
@@ -84,7 +95,7 @@ async def sweep_delete(sweep_id: str):
         c.execute(query, [sweep_id])
         if c.rowcount == 0:
             raise HTTPException(status_code=404, detail="sweep not found")
-        query = "DELETE FROM experiments WHERE sweep_id = ?"
+        query = "DELETE FROM trials WHERE sweep_id = ?"
         c.execute(query, [sweep_id])
     del manager.sweeps[sweep_id]
     return {'status': 'success'}
@@ -93,7 +104,7 @@ async def sweep_delete(sweep_id: str):
 @app.get("/api/sweeps/")
 async def sweep_list() -> List[SweepGetResponse]:
     with manager.db.get_cursor() as c:
-        c.execute("SELECT id, name, parameters, status, created_at FROM sweeps")
+        c.execute("SELECT id, name, parameters, status, created_at, objective, num_trials FROM sweeps")
         results = c.fetchall()
         res = []
         for r in results:
@@ -103,6 +114,8 @@ async def sweep_list() -> List[SweepGetResponse]:
                 parameters={p['name']: SweepParamType(min=p['min'], max=p['max'], log=p['log']) for p in json.loads(r['parameters'])},
                 status=r['status'],
                 created_at=r['created_at'],
+                objective=r['objective'],
+                num_trials=r['num_trials'],
             ))
         return res
         # r['parameters'] = [SpaceItem(**p) for p in json.loads(parameters)]
@@ -137,50 +150,43 @@ async def sweep_ask(sweep_id: str, parameters: Dict[str, float] = None):
     # else:
     #     raise HTTPException(status_code=500, detail={'status': task.status, 'message': task.message})
 
-class ExperimentCreate(BaseModel):
+class TrialCreate(BaseModel):
     parameters: Dict[str, float]
     value: float = None
 
 
-@app.post("/api/sweeps/{sweep_id}/experiments/")
-async def experiment_create(sweep_id: str, exp: ExperimentCreate):
-    id = manager.create_experiment(sweep_id, exp.parameters, exp.value)
+@app.post("/api/sweeps/{sweep_id}/trials/")
+async def trial_create(sweep_id: str, exp: TrialCreate):
+    id = manager.create_trial(sweep_id, exp.parameters, exp.value)
     return {'status': 'success', 'id': id}
 
-@app.post("/api/sweeps/{sweep_id}/experiments/{experiment_id}/report")
-async def report_result(sweep_id: str, experiment_id: str, result: Dict[str, float]):
-    manager.report_result(sweep_id, experiment_id, result['value'])
+@app.post("/api/sweeps/{sweep_id}/trials/{trial_id}/report")
+async def report_result(sweep_id: str, trial_id: str, result: Dict[str, float]):
+    manager.report_result(sweep_id, trial_id, result['value'])
     return {'status': 'success'}
 
-class SweepGetExperimentsResponse(BaseModel):
-    id: str
-    parameters: Dict[str, float]
-    value: float
-    status: str
-    created_at: int
-    completed_at: Optional[int]
-
-@app.get("/api/sweeps/{sweep_id}/experiments/")
-async def sweep_get_experiments(sweep_id: str) -> List[SweepGetExperimentsResponse]:
+@app.get("/api/sweeps/{sweep_id}/trials/")
+async def sweep_get_trials(sweep_id: str) -> List[SweepGetTrialsResponse]:
     with manager.db.get_cursor() as c:
-        c.execute("SELECT id, parameters, value, status, created_at, completed_at FROM experiments WHERE sweep_id = ?", (sweep_id,))
+        c.execute("SELECT id, parameters, value, status, created_at, completed_at, trial_number FROM trials WHERE sweep_id = ?", (sweep_id,))
         results = c.fetchall()
         res = []
         for r in results:
-            res.append(SweepGetExperimentsResponse(
+            res.append(SweepGetTrialsResponse(
                 id=r['id'],
                 parameters=json.loads(r['parameters']),
                 value=r['value'],
                 status=r['status'],
                 created_at=r['created_at'],
                 completed_at=r['completed_at'],
+                trial_number=r['trial_number'],
             ))
         return res
 
 @app.get("/api/sweeps/{sweep_id}")
 async def sweep_get() -> SweepGetResponse:
     with manager.db.get_cursor() as c:
-        c.execute("SELECT id, name, parameters, status, created_at FROM sweeps WHERE id = ?", (sweep_id,))
+        c.execute("SELECT id, name, parameters, status, created_at, num_trials, objective FROM sweeps WHERE id = ?", (sweep_id,))
         if c.rowcount == 0:
             raise HTTPException(status_code=404, detail="sweep not found")
         results = c.fetchall()
@@ -190,4 +196,6 @@ async def sweep_get() -> SweepGetResponse:
             parameters={p['name']: SweepParamType(min=p['min'], max=p['max'], log=p['log']) for p in json.loads(results[0]['parameters'])},
             status=results[0]['status'],
             created_at=results[0]['created_at'],
+            objective=results[0]['objective'],
+            num_trials=results[0]['num_trials'],
         )

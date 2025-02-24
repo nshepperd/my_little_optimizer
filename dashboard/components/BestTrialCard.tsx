@@ -5,18 +5,18 @@ import { Copy, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { Instant, Duration } from "@js-joda/core";
 
-import type { ExperimentResult, OptimizationObjective } from "@/lib/types";
+import type { TrialResult, OptimizationObjective } from "@/lib/types";
 import assert from "assert";
 
 interface BestTrialCardProps {
-  results: ExperimentResult[];
+  results: TrialResult[];
   objective: OptimizationObjective;
 }
 
 const BestTrialCard = ({ results, objective = "min" }: BestTrialCardProps) => {
   // Find the best trial based on objective
   const bestTrial = results.reduce(
-    (best: ExperimentResult | null, current: ExperimentResult) => {
+    (best: TrialResult | null, current: TrialResult) => {
       if (current.value === null) return best;
       if (current.completed_at === null) return best;
       if (!best) return current;

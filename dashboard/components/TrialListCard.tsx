@@ -1,16 +1,16 @@
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ExperimentResult } from "@/lib/types";
+import { TrialResult } from "@/lib/types";
 
-interface ExperimentListCardProps {
-  results: ExperimentResult[];
+interface TrialListCardProps {
+  results: TrialResult[];
 }
 
-const ExperimentListCard = ({ results }: ExperimentListCardProps) => {
+const TrialListCard = ({ results }: TrialListCardProps) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Experiments</CardTitle>
+        <CardTitle>Trials</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
@@ -50,4 +50,4 @@ const ExperimentListCard = ({ results }: ExperimentListCardProps) => {
   );
 };
 
-export default ExperimentListCard;
+export default TrialListCard;
