@@ -12,8 +12,8 @@ import threading
 from dataclasses import dataclass, asdict
 import time
 
-from ngp.server.manager import SweepManager
-from ngp.server.types import SweepSpaceItem, SliceVisualization, SliceVisualizationDatapoint
+from my_little_optimizer.server.manager import SweepManager
+from my_little_optimizer.server.types import SweepSpaceItem, SliceVisualization, SliceVisualizationDatapoint
 
 
 manager: SweepManager = None

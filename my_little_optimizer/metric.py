@@ -7,8 +7,8 @@ from functools import partial
 from dataclasses import dataclass
 from jax_tqdm import scan_tqdm
 
-from ngp.nuts import nuts_kernel
-from ngp.kfac import kfac
+from my_little_optimizer.nuts import nuts_kernel
+from my_little_optimizer.kfac import kfac
 
 T = TypeVar('T')
 

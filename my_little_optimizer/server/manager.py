@@ -14,9 +14,9 @@ import traceback
 from cachetools import TTLCache
 import jax
 
-from ngp.server.database import Database
-from ngp.optim import Optim, SpaceItem, Trial
-from ngp.server.types import SweepSpaceItem, SliceVisualization, SliceVisualizationDatapoint
+from my_little_optimizer.server.database import Database
+from my_little_optimizer.optim import Optim, SpaceItem, Trial
+from my_little_optimizer.server.types import SweepSpaceItem, SliceVisualization, SliceVisualizationDatapoint
 
 # class Task:
 #     id: str

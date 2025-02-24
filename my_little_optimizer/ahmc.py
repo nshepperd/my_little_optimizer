@@ -8,8 +8,8 @@ from jax_tqdm import scan_tqdm
 import einops
 import jax.scipy as jsp
 
-from ngp.gaussian_process import GP
-from ngp.util import Fn, fn, Partial
+from my_little_optimizer.gaussian_process import GP
+from my_little_optimizer.util import Fn, fn, Partial
 
 def leapfrog(theta: jax.Array, r: jax.Array, logp_grad, eps: jax.Array) -> Tuple[jax.Array, jax.Array]:
     """Single leapfrog step"""

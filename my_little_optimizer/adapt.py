@@ -7,7 +7,7 @@ from functools import partial
 from dataclasses import dataclass
 from jax_tqdm import scan_tqdm
 
-from ngp.nuts import nuts_kernel, leapfrog, compute_hamiltonian
+from my_little_optimizer.nuts import nuts_kernel, leapfrog, compute_hamiltonian
 
 def find_reasonable_epsilon(key, theta, logp, target=0.5, max_steps=50):
     logp_grad = jax.grad(logp)

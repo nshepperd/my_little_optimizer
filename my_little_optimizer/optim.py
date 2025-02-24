@@ -19,12 +19,12 @@ from jaxtorch import nn
 from jaxtorch import PRNG, Context
 import jaxtorch
 
-from ngp.log_h import log_h
-from ngp.metric import DictionaryMetric, ScalarMetric, Metric, MetricEstimator
-from ngp.metric import DictionaryMetricEstimator, CovarianceMetricEstimator, KroneckerMetricEstimator
-from ngp.util import Partial
-from ngp.turnkey import sample_adaptive
-from ngp.ahmc import ahmc_fast
+from my_little_optimizer.log_h import log_h
+from my_little_optimizer.metric import DictionaryMetric, ScalarMetric, Metric, MetricEstimator
+from my_little_optimizer.metric import DictionaryMetricEstimator, CovarianceMetricEstimator, KroneckerMetricEstimator
+from my_little_optimizer.util import Partial
+from my_little_optimizer.turnkey import sample_adaptive
+from my_little_optimizer.ahmc import ahmc_fast
 
 @dataclass
 class SpaceItem:

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from jaxtorch import nn
 from jaxtorch import PRNG, Context
 
-from ngp.log_h import log_h
+from my_little_optimizer.log_h import log_h
 import hmc
 
 if __name__ == '__main__':

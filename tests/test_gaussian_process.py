@@ -7,7 +7,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from ngp.gaussian_process import GP
+from my_little_optimizer.gaussian_process import GP
 
 
 def rbf_kernel(length_scale: float = 1.0) -> Callable:

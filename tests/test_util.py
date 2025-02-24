@@ -1,7 +1,7 @@
 import pytest
 import jax
 import jax.numpy as jnp
-from ngp.util import fn, StaticFn, Partial
+from my_little_optimizer.util import fn, StaticFn, Partial
 
 def test_fn_helper():
     # Test regular function wrapping

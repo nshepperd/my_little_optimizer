@@ -6,8 +6,8 @@ from functools import partial
 from dataclasses import dataclass
 from jax_tqdm import scan_tqdm
 
-from ngp.nuts import nuts_kernel
-from ngp.adapt import find_reasonable_epsilon, warmup_with_dual_averaging
+from my_little_optimizer.nuts import nuts_kernel
+from my_little_optimizer.adapt import find_reasonable_epsilon, warmup_with_dual_averaging
 
 if __name__ == '__main__':
     from matplotlib import pyplot as plt

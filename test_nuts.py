@@ -16,12 +16,12 @@ from dataclasses import dataclass
 from jaxtorch import nn
 from jaxtorch import PRNG, Context
 
-from ngp.log_h import log_h
-from ngp.metric import DictionaryMetric, ScalarMetric
-from ngp.metric import DictionaryMetricEstimator, CovarianceMetricEstimator, KroneckerMetricEstimator
-from ngp.nuts import nuts_kernel
-from ngp.adapt import warmup_with_dual_averaging, find_reasonable_epsilon
-from ngp.ahmc import ahmc_fast, sample_hmc
+from my_little_optimizer.log_h import log_h
+from my_little_optimizer.metric import DictionaryMetric, ScalarMetric
+from my_little_optimizer.metric import DictionaryMetricEstimator, CovarianceMetricEstimator, KroneckerMetricEstimator
+from my_little_optimizer.nuts import nuts_kernel
+from my_little_optimizer.adapt import warmup_with_dual_averaging, find_reasonable_epsilon
+from my_little_optimizer.ahmc import ahmc_fast, sample_hmc
 import einops
 
 if __name__ == '__main__':
