@@ -1,0 +1,10 @@
+fastapi[standard]
+jax[cuda12_pip]
+optax
+matplotlib
+jax-tqdm
+eindex==0.1.0
+einops
+jaxtorch
+jaxopt
+requests

@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "ngp"
+name = "my_little_optimizer"
 version = "0.1.0"
 description = ""
 authors = ["nshepperd <nshepperd@gmail.com>"]
