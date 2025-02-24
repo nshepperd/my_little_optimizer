@@ -248,7 +248,7 @@ const SweepDashboard = () => {
               </div>
             </div>
 
-            <SliceVisualizationCard sweep={selectedSweep} />
+            <SliceVisualizationCard sweep={selectedSweep} autoRefresh={autoRefresh} />
 
             {/* Results Table */}
             <TrialListCard results={results} />

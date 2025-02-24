@@ -75,6 +75,12 @@ export interface SliceVisualizationResponse {
   job_id: string | null;
 }
 
+export interface PollResponse<T> {
+  status: 'done' | 'error' | 'pending' | 'running';
+  result: T | null;
+  message: string | null;
+}
+
 export interface ApiResponse<T> {
   status: 'ok' | 'error';
   data: T;

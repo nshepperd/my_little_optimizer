@@ -165,6 +165,13 @@ async def sweep_ask(sweep_id: str, parameters: Dict[str, float] = None) -> ApiRe
 
 @app.post("/api/sweeps/{sweep_id}/visualize/slice")
 async def sweep_get_slice_visualization(sweep_id: str, options: SliceVisualizationRequest) -> ApiResponse[SliceVisualizationResponse]:
+    with manager.db.get_cursor() as c:
+        c.execute("SELECT id, num_trials, objective FROM sweeps WHERE id = ?", (sweep_id,))
+        results = c.fetchall()
+        if len(results) == 0:
+            return ApiResponse.error("sweep not found", code='not_found')
+        if results[0]['num_trials'] == 0:
+            return ApiResponse.error("sweep has no trials", code='invalid')
     res = manager.get_slice_visualization(sweep_id, options.param_name)
     return ApiResponse.ok(SliceVisualizationResponse(**res))
 
