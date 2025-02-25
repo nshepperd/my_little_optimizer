@@ -15,7 +15,7 @@ from cachetools import TTLCache
 import jax
 
 from my_little_optimizer.server.database import Database
-from my_little_optimizer.optim import Optim, SpaceItem, Trial
+from my_little_optimizer.opt.optim import Optim, SpaceItem, Trial
 from my_little_optimizer.server.types import SweepSpaceItem, SliceVisualization, SliceVisualizationDatapoint
 
 # class Task:

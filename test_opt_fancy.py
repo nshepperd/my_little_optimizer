@@ -17,7 +17,7 @@ from jaxtorch import nn
 from jaxtorch import PRNG, Context
 import jaxtorch
 
-from my_little_optimizer.optim import SpaceItem, Optim
+from my_little_optimizer.opt.optim import SpaceItem, Optim
 from my_little_optimizer.util import Partial
 
 import optuna
@@ -48,7 +48,7 @@ if __name__ == '__main__':
     # opt.infer()
     # jaxtorch.pt.save(opt.fitted.chains, 'chains.pt')
 
-    from my_little_optimizer.optim import FittedMLP
+    from my_little_optimizer.opt.optim import FittedMLP
     chains = jaxtorch.pt.load('chains.pt')
     opt.fitted = FittedMLP(opt.model.model, chains)
 
