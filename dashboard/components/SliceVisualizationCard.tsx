@@ -139,7 +139,10 @@ const SliceVisualizationCard = ({
   // Auto-refresh
   useInterval(
     () => {
-      fetchVisualization();
+      if (!jobId) {
+        // Only fetch visualization if we're not already waiting for one to come back.
+        fetchVisualization();
+      }
     },
     autoRefresh ? REFRESH_INTERVAL : null
   );
