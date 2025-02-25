@@ -76,7 +76,10 @@ const SliceVisualizationCard = ({
       if (result.status === "ok") {
         const resp = result.data;
         if (resp.cached) {
-          if (resp.cached.sweep_id === sweep.id && resp.cached.param_name === selectedParam) {
+          if (
+            resp.cached.sweep_id === sweep.id &&
+            resp.cached.param_name === selectedParam
+          ) {
             setVisualization(resp.cached);
             setLoading(false);
           }
@@ -84,7 +87,7 @@ const SliceVisualizationCard = ({
         if (resp.job_id) {
           setJobId(resp.job_id);
         }
-      } else if(result.code === 'no_data') {
+      } else if (result.code === "no_data") {
         setError(result.message);
         setLoading(false);
       } else {
@@ -108,7 +111,11 @@ const SliceVisualizationCard = ({
         if (result.status === "ok") {
           if (result.data.status === "done") {
             let new_vis = result.data.result;
-            if (new_vis && new_vis.sweep_id === sweep.id && new_vis.param_name === selectedParam) {
+            if (
+              new_vis &&
+              new_vis.sweep_id === sweep.id &&
+              new_vis.param_name === selectedParam
+            ) {
               setVisualization(result.data.result);
               setLoading(false);
             }
@@ -137,18 +144,18 @@ const SliceVisualizationCard = ({
     autoRefresh ? REFRESH_INTERVAL : null
   );
 
+  useEffect(() => {
+    if (selectedParam && !Object.keys(sweep.parameters).includes(selectedParam)) {
+      setSelectedParam(Object.keys(sweep.parameters)[0]);
+    }
+  }, [sweep]);
+
   // Initial fetch
   useEffect(() => {
-    if (visualization && sweep.id !== visualization.sweep_id) {
-      setVisualization(null);
-    }
-    if (visualization && selectedParam !== visualization.param_name) {
-      setVisualization(null);
-    }
-    if (selectedParam) {
+    if (selectedParam && Object.keys(sweep.parameters).includes(selectedParam)) {
       fetchVisualization();
     }
-  }, [sweep.id, selectedParam]);
+  }, [sweep, selectedParam]);
 
   if (!selectedParam) return null;
 
@@ -237,132 +244,134 @@ const SliceVisualizationCard = ({
         </div>
       </CardHeader>
       <CardContent>
-        {visualization && selectedParam && (
-          <>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart
-                  margin={{ top: 5, right: 30, left: 20, bottom: 20 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="x"
-                    type="number"
-                    domain={["auto", "auto"]}
-                    label={{ value: selectedParam, position: "bottom" }}
-                    scale={
-                      sweep.parameters[selectedParam].log ? "log" : "linear"
-                    }
-                    ticks={(() => {
-                      // Only generate custom ticks for log scale
-                      if (!sweep.parameters[selectedParam]?.log)
-                        return undefined;
+        {visualization &&
+          selectedParam && Object.keys(sweep.parameters).includes(selectedParam) &&
+          visualization.sweep_id === sweep.id && (
+            <>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart
+                    margin={{ top: 5, right: 30, left: 20, bottom: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="x"
+                      type="number"
+                      domain={["auto", "auto"]}
+                      label={{ value: selectedParam, position: "bottom" }}
+                      scale={
+                        sweep.parameters[selectedParam].log ? "log" : "linear"
+                      }
+                      ticks={(() => {
+                        // Only generate custom ticks for log scale
+                        if (!sweep.parameters[selectedParam]?.log)
+                          return undefined;
 
-                      // Get parameter range
-                      const min = sweep.parameters[selectedParam].min;
-                      const max = sweep.parameters[selectedParam].max;
+                        // Get parameter range
+                        const min = sweep.parameters[selectedParam].min;
+                        const max = sweep.parameters[selectedParam].max;
 
-                      // Generate logarithmic tick positions
-                      const logTicks = [];
+                        // Generate logarithmic tick positions
+                        const logTicks = [];
 
-                      // Find appropriate decade bounds
-                      const minDecade = Math.floor(Math.log10(min));
-                      const maxDecade = Math.ceil(Math.log10(max));
+                        // Find appropriate decade bounds
+                        const minDecade = Math.floor(Math.log10(min));
+                        const maxDecade = Math.ceil(Math.log10(max));
 
-                      // For each decade
-                      for (
-                        let decade = minDecade;
-                        decade <= maxDecade;
-                        decade++
-                      ) {
-                        // Add 1, 2, 5 for each decade (standard log scale divisions)
-                        for (const multiplier of [1, 2, 5]) {
-                          const tickValue = multiplier * Math.pow(10, decade);
-                          if (tickValue >= min && tickValue <= max) {
-                            logTicks.push(tickValue);
+                        // For each decade
+                        for (
+                          let decade = minDecade;
+                          decade <= maxDecade;
+                          decade++
+                        ) {
+                          // Add 1, 2, 5 for each decade (standard log scale divisions)
+                          for (const multiplier of [1, 2, 5]) {
+                            const tickValue = multiplier * Math.pow(10, decade);
+                            if (tickValue >= min && tickValue <= max) {
+                              logTicks.push(tickValue);
+                            }
                           }
                         }
-                      }
 
-                      return logTicks;
-                    })()}
-                  />
-                  <YAxis
-                    label={{
-                      value: "Value",
-                      angle: -90,
-                      position: "insideLeft",
-                    }}
-                    domain={["auto", "auto"]}
-                  />
-                  <Tooltip
-                    content={renderTooltipWithoutRange}
-                    isAnimationActive={false}
-                  />
+                        return logTicks;
+                      })()}
+                    />
+                    <YAxis
+                      label={{
+                        value: "Value",
+                        angle: -90,
+                        position: "insideLeft",
+                      }}
+                      domain={["auto", "auto"]}
+                    />
+                    <Tooltip
+                      content={renderTooltipWithoutRange}
+                      isAnimationActive={false}
+                    />
 
-                  {/* 3-sigma confidence band */}
-                  <Area
-                    name="3σ confidence"
-                    data={visualization.data.map((d) => ({
-                      ...d,
-                      a: [d.y_mean - 3 * d.y_std, d.y_mean + 3 * d.y_std],
-                    }))}
-                    dataKey="a"
-                    stroke="none"
-                    fillOpacity={0.1}
-                    fill="#2563eb"
-                    activeDot={false}
-                    isAnimationActive={false}
-                  />
+                    {/* 3-sigma confidence band */}
+                    <Area
+                      name="3σ confidence"
+                      data={visualization.data.map((d) => ({
+                        ...d,
+                        a: [d.y_mean - 3 * d.y_std, d.y_mean + 3 * d.y_std],
+                      }))}
+                      dataKey="a"
+                      stroke="none"
+                      fillOpacity={0.1}
+                      fill="#2563eb"
+                      activeDot={false}
+                      isAnimationActive={false}
+                    />
 
-                  {/* 2-sigma confidence band */}
-                  <Area
-                    name="2σ confidence"
-                    data={visualization.data.map((d) => ({
-                      ...d,
-                      a: [d.y_mean - 2 * d.y_std, d.y_mean + 2 * d.y_std],
-                    }))}
-                    dataKey="a"
-                    stroke="none"
-                    fillOpacity={0.1}
-                    fill="#2563eb"
-                    activeDot={false}
-                    isAnimationActive={false}
-                  />
+                    {/* 2-sigma confidence band */}
+                    <Area
+                      name="2σ confidence"
+                      data={visualization.data.map((d) => ({
+                        ...d,
+                        a: [d.y_mean - 2 * d.y_std, d.y_mean + 2 * d.y_std],
+                      }))}
+                      dataKey="a"
+                      stroke="none"
+                      fillOpacity={0.1}
+                      fill="#2563eb"
+                      activeDot={false}
+                      isAnimationActive={false}
+                    />
 
-                  {/* 1-sigma confidence band */}
-                  <Area
-                    name="1σ confidence"
-                    data={visualization.data.map((d) => ({
-                      ...d,
-                      a: [d.y_mean - 1 * d.y_std, d.y_mean + 1 * d.y_std],
-                    }))}
-                    dataKey="a"
-                    stroke="none"
-                    fillOpacity={0.1}
-                    fill="#2563eb"
-                    activeDot={false}
-                    isAnimationActive={false}
-                  />
+                    {/* 1-sigma confidence band */}
+                    <Area
+                      name="1σ confidence"
+                      data={visualization.data.map((d) => ({
+                        ...d,
+                        a: [d.y_mean - 1 * d.y_std, d.y_mean + 1 * d.y_std],
+                      }))}
+                      dataKey="a"
+                      stroke="none"
+                      fillOpacity={0.1}
+                      fill="#2563eb"
+                      activeDot={false}
+                      isAnimationActive={false}
+                    />
 
-                  {/* Mean prediction line */}
-                  <Line
-                    name="Mean prediction"
-                    data={visualization.data}
-                    dataKey="y_mean"
-                    stroke="#2563eb"
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="text-sm text-gray-500 mt-2">
-              Last computed:{" "}
-              {new Date(visualization.computed_at * 1000).toLocaleString()}
-            </div>
-          </>
-        )}
+                    {/* Mean prediction line */}
+                    <Line
+                      name="Mean prediction"
+                      data={visualization.data}
+                      dataKey="y_mean"
+                      stroke="#2563eb"
+                      dot={false}
+                      isAnimationActive={false}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="text-sm text-gray-500 mt-2">
+                Last computed:{" "}
+                {new Date(visualization.computed_at * 1000).toLocaleString()}
+              </div>
+            </>
+          )}
       </CardContent>
     </Card>
   );

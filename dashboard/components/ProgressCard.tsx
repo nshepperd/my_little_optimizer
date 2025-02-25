@@ -17,12 +17,13 @@ import { TrialResult, OptimizationObjective } from "@/lib/types";
 interface ProgressCardProps {
   results: TrialResult[];
   objective: OptimizationObjective;
+  className?: string;
 }
 
-const ProgressCard = ({ results, objective }: ProgressCardProps) => {
+const ProgressCard = ({ results, objective, className }: ProgressCardProps) => {
   if (!results || results.length === 0) {
     return (
-      <Card>
+      <Card className={`${className || ""}`}>
         <CardHeader>
           <CardTitle>Optimization Progress</CardTitle>
         </CardHeader>
@@ -48,53 +49,52 @@ const ProgressCard = ({ results, objective }: ProgressCardProps) => {
   }
 
   return (
-    <Card className="mb-6">
+    <Card className={`${className || ""} flex flex-col`}>
       <CardHeader>
         <CardTitle>Optimization Progress</CardTitle>
       </CardHeader>
-      <CardContent>
-        {bestTrials.length} trials so far.
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                data={bestTrials}
-                >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="trial_number"
-                type="number"
-                label={{ value: "Trial Number", position: "bottom" }}
-              />
-              <YAxis
-                dataKey="value"
-                label={{
-                  value: "Value",
-                  angle: -90,
-                  position: "insideLeft",
-                }}
-                domain={["auto", "auto"]}
-              />
-              <Tooltip animationDuration={0} />
-              <Line
-                name="Best so far"
-                type="stepAfter"
-                dataKey="best_value"
-                key="best"
-                stroke="#2563eb"
-                dot={false}
-                isAnimationActive={false}
-              />
-              <Scatter
-                name="Trial results"
-                dataKey="value"
-                key="results"
-                fill="#6366f1"
-                isAnimationActive={false}
-                stroke="#8884d8"
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
+      <CardContent className="gap-4 flex-1">
+        <div className="mb-2">{bestTrials.length} trials so far.</div>
+        <ResponsiveContainer minWidth={200} width="100%" height="80%">
+          <ComposedChart
+            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+            data={bestTrials}
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              dataKey="trial_number"
+              type="number"
+              label={{ value: "Trial Number", position: "bottom" }}
+            />
+            <YAxis
+              dataKey="value"
+              label={{
+                value: "Value",
+                angle: -90,
+                position: "insideLeft",
+              }}
+              domain={["auto", "auto"]}
+            />
+            <Tooltip animationDuration={0} />
+            <Line
+              name="Best so far"
+              type="stepAfter"
+              dataKey="best_value"
+              key="best"
+              stroke="#2563eb"
+              dot={false}
+              isAnimationActive={false}
+            />
+            <Scatter
+              name="Trial results"
+              dataKey="value"
+              key="results"
+              fill="#6366f1"
+              isAnimationActive={false}
+              stroke="#8884d8"
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
       </CardContent>
     </Card>
   );

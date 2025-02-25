@@ -11,9 +11,14 @@ import assert from "assert";
 interface BestTrialCardProps {
   results: TrialResult[];
   objective: OptimizationObjective;
+  className?: string;
 }
 
-const BestTrialCard = ({ results, objective = "min" }: BestTrialCardProps) => {
+const BestTrialCard = ({
+  results,
+  objective = "min",
+  className,
+}: BestTrialCardProps) => {
   // Find the best trial based on objective
   const bestTrial = results.reduce(
     (best: TrialResult | null, current: TrialResult) => {
@@ -34,7 +39,7 @@ const BestTrialCard = ({ results, objective = "min" }: BestTrialCardProps) => {
   if (bestTrial === null) {
     // Show a greyed out card for no results yet.
     return (
-      <Card className="w-full h-full">
+      <Card className={`${className || ""}`}>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>Best Trial</span>
@@ -77,7 +82,7 @@ const BestTrialCard = ({ results, objective = "min" }: BestTrialCardProps) => {
   };
 
   return (
-    <Card>
+    <Card className={`${className || ""}`}>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span>Best Trial</span>

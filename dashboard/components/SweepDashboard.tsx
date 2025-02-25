@@ -44,7 +44,7 @@ const SweepDashboard = () => {
     try {
       const response = await fetch("/api/sweeps");
       const data: ApiResponse<Sweep[]> = await response.json();
-      if (data.status !== 'ok') {
+      if (data.status !== "ok") {
         throw new Error(data.message);
       }
       setSweeps(data.data);
@@ -60,7 +60,7 @@ const SweepDashboard = () => {
       setLoading(true);
       const response = await fetch(`/api/sweeps/${selectedSweep.id}/trials`);
       const data: ApiResponse<TrialResult[]> = await response.json();
-      if (data.status !== 'ok') {
+      if (data.status !== "ok") {
         throw new Error(data.message);
       }
       const sortedData = data.data
@@ -232,23 +232,24 @@ const SweepDashboard = () => {
             </h1>
 
             <div className="flex gap-6 mb-6">
-              <div className="w-1/3">
-                <BestTrialCard
-                  results={results}
-                  objective={selectedSweep.objective}
-                />
-              </div>
+              <BestTrialCard
+                results={results}
+                objective={selectedSweep.objective}
+                className="flex-0"
+              />
 
               {/* Results Chart */}
-              <div className="w-2/3">
-                <ProgressCard
-                  results={results}
-                  objective={selectedSweep.objective}
-                />
-              </div>
+              <ProgressCard
+                results={results}
+                objective={selectedSweep.objective}
+                className="flex-1"
+              />
             </div>
 
-            <SliceVisualizationCard sweep={selectedSweep} autoRefresh={autoRefresh} />
+            <SliceVisualizationCard
+              sweep={selectedSweep}
+              autoRefresh={autoRefresh}
+            />
 
             {/* Results Table */}
             <TrialListCard results={results} />
