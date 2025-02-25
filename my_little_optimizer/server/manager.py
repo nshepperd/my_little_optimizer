@@ -117,12 +117,37 @@ class SweepManager:
     def close(self):
         self.db.close()
 
-    def create_sweep(self, name: str, parameters: List[SweepSpaceItem], objective: Literal['min', 'max'] = 'min'):
+    def create_project(self, name: str) -> str:
+        project_id = str(uuid.uuid4())
+        created_at = int(time.time())
+        
+        with self.db.get_cursor() as c:
+            # Check if project with this name already exists
+            c.execute("SELECT id FROM projects WHERE name = ?", (name,))
+            existing = c.fetchone()
+            if existing:
+                return existing['id']
+                
+            # Create new project
+            c.execute(
+                "INSERT INTO projects (id, name, created_at) VALUES (?, ?, ?)",
+                (project_id, name, created_at)
+            )
+        
+        return project_id
+
+    def get_project_by_name(self, name: str) -> Optional[str]:
+        with self.db.get_cursor() as c:
+            c.execute("SELECT id FROM projects WHERE name = ?", (name,))
+            result = c.fetchone()
+            return result['id'] if result else None
+    
+    def create_sweep(self, name: str, parameters: List[SweepSpaceItem], objective: Literal['min', 'max'] = 'min', project_id: str = None):
         sweep_id = str(uuid.uuid4())
 
         with self.db.get_cursor() as c:
             c.execute(
-                "INSERT INTO sweeps (id, name, parameters, objective, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO sweeps (id, name, parameters, objective, status, created_at, project_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     sweep_id,
                     name,
@@ -130,6 +155,7 @@ class SweepManager:
                     objective,
                     "active",
                     int(time.time()),
+                    project_id,
                 ),
             )
         
@@ -155,6 +181,11 @@ class SweepManager:
             completed_at = created_at
 
         with self.db.get_cursor() as c:
+            # Get project_id from the sweep
+            c.execute("SELECT project_id FROM sweeps WHERE id = ?", (sweep_id,))
+            result = c.fetchone()
+            project_id = result['project_id'] if result else None
+            
             # Atomically increment and get the trial number
             c.execute(
                 "UPDATE sweeps SET num_trials = num_trials + 1 WHERE id = ? RETURNING num_trials",
@@ -163,8 +194,8 @@ class SweepManager:
             trial_number = c.fetchone()['num_trials']
 
             c.execute(
-                """INSERT INTO trials (id, sweep_id, parameters, value, status, created_at, completed_at, trial_number)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO trials (id, sweep_id, parameters, value, status, created_at, completed_at, trial_number, project_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     id,
                     sweep_id,
@@ -174,10 +205,10 @@ class SweepManager:
                     created_at,
                     completed_at,
                     trial_number,
+                    project_id,
                 ),
             )
         
-        # self.sweeps[sweep_id].trials[id] = TrialInfo(id=id, sweep_id=sweep_id, parameters=parameters, value=value, status=status, created_at=created_at, completed_at=completed_at)
         return id
 
     def report_result(self, sweep_id: str, trial_id: str, value: float):
@@ -292,8 +323,19 @@ def init_db(db: Database):
     with db.get_cursor() as c:
         c.execute(
             """
+            CREATE TABLE IF NOT EXISTS projects (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                created_at TIMESTAMP
+            )
+            """
+        )
+
+        c.execute(
+            """
             CREATE TABLE IF NOT EXISTS sweeps (
                 id TEXT PRIMARY KEY,
+                project_id TEXT,
                 name TEXT,
                 parameters JSON,
                 objective TEXT,
@@ -308,6 +350,7 @@ def init_db(db: Database):
             CREATE TABLE IF NOT EXISTS trials (
                 id TEXT PRIMARY KEY,
                 sweep_id TEXT,
+                project_id TEXT,
                 parameters JSON,
                 value REAL,
                 status TEXT,

@@ -21,20 +21,54 @@ class OptimClient:
         self.url = url
     
     def get_sweep(self, id: str):
-        # TODO: check that it exists first
         return SweepHandle(self, id)
+    
+    def get_project(self, id: str):
+        return ProjectHandle(self, id)
+    
+    def get_project_by_name(self, name: str):
+        return self.new_project(name)
 
+    def new_project(self, name: str):
+        data = {"name": name}
+        r = req(self.url + '/api/projects/', 'POST', data=data)
+        r = r.json()
+        assert r['status'] == 'ok'
+        return ProjectHandle(self, r['data'])
 
-    def new_sweep(self, name: str, parameters: List[SpaceItem], objective='min'):
+    def new_sweep(self, name: str, parameters: List[SpaceItem], objective='min', project_id=None, project_name=None):
+        if not project_id and not project_name:
+            raise ValueError("Either project_id or project_name must be provided")
+            
         data = {
             "name": name,
             "parameters": [asdict(p) for p in parameters],
             "objective": objective,
         }
+        
+        if project_id:
+            data["project_id"] = project_id
+        else:
+            data["project_name"] = project_name
+            
         r = req(self.url + '/api/sweeps/', 'POST', data=data)
         r = r.json()
         assert r['status'] == 'ok'
         return SweepHandle(self, r['data'])
+
+@dataclass
+class ProjectHandle:
+    client: OptimClient
+    id: str
+    
+    def get_sweeps(self):
+        r = req(self.client.url + f'/api/projects/{self.id}/sweeps', 'GET')
+        r = r.json()
+        assert r['status'] == 'ok'
+        return [SweepHandle(self.client, sweep['id']) for sweep in r['data']]
+    
+    def new_sweep(self, name: str, parameters: List[SpaceItem], objective='min'):
+        return self.client.new_sweep(name, parameters, objective, project_id=self.id)
     
 @dataclass
 class SweepHandle:
@@ -98,7 +132,8 @@ if __name__ == '__main__':
     client = OptimClient('http://localhost:8000')
     sweep = client.new_sweep('test_xy_complex', [SpaceItem('x', -1, 1),
                                                 SpaceItem('y', -1, 1)
-                                                ], objective='min')
+                                                ], objective='min',
+                                                project_name='test')
     print('id:', sweep.id)
     # sweep = client.get_sweep('test_random_y')
     for i in range(20):

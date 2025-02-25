@@ -57,6 +57,8 @@ class SweepCreate(BaseModel):
     name: str
     parameters: List[SweepSpaceItem]
     objective: Literal['min', 'max'] = 'min'
+    project_id: Optional[str] = None
+    project_name: Optional[str] = None
 
 class SweepParamType(BaseModel):
     min: float
@@ -71,6 +73,8 @@ class SweepGetResponse(BaseModel):
     created_at: int
     objective: Literal['min', 'max']
     num_trials: int
+    project_id: Optional[str] = None
+    project_name: Optional[str] = None
 
 class SweepGetTrialsResponse(BaseModel):
     id: str
@@ -87,6 +91,15 @@ class SliceVisualizationResponse(BaseModel):
     cached: Optional[SliceVisualization]
     job_id: Optional[UUID]
 
+class ProjectCreate(BaseModel):
+    name: str
+
+class ProjectGetResponse(BaseModel):
+    id: str
+    name: str
+    created_at: int
+    sweep_count: int
+
 def todict(xs):
     if isinstance(xs, list):
         return [todict(x) for x in xs]
@@ -99,7 +112,17 @@ def todict(xs):
 
 @app.post("/api/sweeps/")
 async def sweep_create(sweep: SweepCreate) -> ApiResponse[str]:
-    sweep_id = manager.create_sweep(sweep.name, sweep.parameters, sweep.objective)
+    if sweep.project_id is None and sweep.project_name is None:
+        return ApiResponse.error("Either project_id or project_name must be provided", code='invalid_request')
+    
+    project_id = sweep.project_id
+    if project_id is None:
+        # Try to find existing project by name or create a new one
+        project_id = manager.get_project_by_name(sweep.project_name)
+        if not project_id:
+            project_id = manager.create_project(sweep.project_name)
+    
+    sweep_id = manager.create_sweep(sweep.name, sweep.parameters, sweep.objective, project_id)
     return ApiResponse.ok(sweep_id)
 
 
@@ -225,3 +248,72 @@ async def sweep_get(sweep_id: str) -> ApiResponse[SweepGetResponse]:
             objective=results[0]['objective'],
             num_trials=results[0]['num_trials'],
         ))
+    
+@app.post("/api/projects/")
+async def project_create(project: ProjectCreate) -> ApiResponse[str]:
+    project_id = manager.create_project(project.name)
+    return ApiResponse.ok(project_id)
+
+@app.get("/api/projects/")
+async def project_list() -> ApiResponse[List[ProjectGetResponse]]:
+    with manager.db.get_cursor() as c:
+        # Get projects with sweep counts
+        c.execute("""
+            SELECT p.id, p.name, p.created_at, COUNT(s.id) as sweep_count
+            FROM projects p
+            LEFT JOIN sweeps s ON p.id = s.project_id
+            GROUP BY p.id
+        """)
+        results = c.fetchall()
+        res = []
+        for r in results:
+            res.append(ProjectGetResponse(
+                id=r['id'],
+                name=r['name'],
+                created_at=r['created_at'],
+                sweep_count=r['sweep_count'],
+            ))
+        return ApiResponse.ok(res)
+
+@app.get("/api/projects/{project_id}")
+async def project_get(project_id: str) -> ApiResponse[ProjectGetResponse]:
+    with manager.db.get_cursor() as c:
+        c.execute("""
+            SELECT p.id, p.name, p.created_at, COUNT(s.id) as sweep_count
+            FROM projects p
+            LEFT JOIN sweeps s ON p.id = s.project_id
+            WHERE p.id = ?
+            GROUP BY p.id
+        """, (project_id,))
+        result = c.fetchone()
+        if not result:
+            return ApiResponse.error("project not found", code='not_found')
+        
+        return ApiResponse.ok(ProjectGetResponse(
+            id=result['id'],
+            name=result['name'],
+            created_at=result['created_at'],
+            sweep_count=result['sweep_count'],
+        ))
+
+@app.get("/api/projects/{project_id}/sweeps")
+async def project_get_sweeps(project_id: str) -> ApiResponse[List[SweepGetResponse]]:
+    with manager.db.get_cursor() as c:
+        c.execute("""
+            SELECT id, name, parameters, status, created_at, objective, num_trials 
+            FROM sweeps 
+            WHERE project_id = ?
+        """, (project_id,))
+        results = c.fetchall()
+        res = []
+        for r in results:
+            res.append(SweepGetResponse(
+                id=r['id'],
+                name=r['name'],
+                parameters={p['name']: SweepParamType(min=p['min'], max=p['max'], log=p['log']) for p in json.loads(r['parameters'])},
+                status=r['status'],
+                created_at=r['created_at'],
+                objective=r['objective'],
+                num_trials=r['num_trials'],
+            ))
+        return ApiResponse.ok(res)

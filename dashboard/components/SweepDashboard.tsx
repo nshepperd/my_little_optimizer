@@ -15,50 +15,42 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { useInterval } from "@/lib/useInterval";
-import { Toaster } from "sonner";
 
 import BestTrialCard from "./BestTrialCard";
 import ProgressCard from "./ProgressCard";
 import TrialListCard from "./TrialListCard";
-import { TrialResult, Sweep, ApiResponse } from "@/lib/types";
+import BreadcrumbNavigator from "./BreadcrumbNavigator";
+import { TrialResult, Sweep, Project, ApiResponse } from "@/lib/types";
 import SliceVisualizationCard from "./SliceVisualizationCard";
 
-const SweepDashboard = () => {
-  const [sweeps, setSweeps] = useState<Sweep[]>([]);
-  const [selectedSweep, setSelectedSweep] = useState<Sweep | null>(null);
+interface SweepDashboardProps {
+  sweep: Sweep;
+  project: Project;
+  onBackToProject: () => void;
+  onBackToProjects: () => void;
+  autoRefresh: boolean;
+  onSelectSweep: (sweep: Sweep) => void;
+}
+
+const SweepDashboard = ({
+  sweep,
+  project,
+  onBackToProject,
+  onBackToProjects,
+  autoRefresh,
+  onSelectSweep,
+}: SweepDashboardProps) => {
   const [results, setResults] = useState<TrialResult[]>([]);
+  const [sweeps, setSweeps] = useState<Sweep[]>([]);
   const [loading, setLoading] = useState(true);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
-  const [sweepToRename, setSweepToRename] = useState<Sweep | null>(null);
   const [newName, setNewName] = useState("");
-  const [autoRefresh, setAutoRefresh] = useState(false);
-
-  useEffect(() => {
-    fetchSweeps();
-  }, []);
-
-  const fetchSweeps = async () => {
-    try {
-      const response = await fetch("/api/sweeps");
-      const data: ApiResponse<Sweep[]> = await response.json();
-      if (data.status !== "ok") {
-        throw new Error(data.message);
-      }
-      setSweeps(data.data);
-    } catch (error) {
-      console.error("Error fetching sweeps:", error);
-    }
-  };
 
   const fetchResults = async () => {
-    if (!selectedSweep) return;
-
     try {
       setLoading(true);
-      const response = await fetch(`/api/sweeps/${selectedSweep.id}/trials`);
+      const response = await fetch(`/api/sweeps/${sweep.id}/trials`);
       const data: ApiResponse<TrialResult[]> = await response.json();
       if (data.status !== "ok") {
         throw new Error(data.message);
@@ -77,56 +69,40 @@ const SweepDashboard = () => {
     }
   };
 
+  const fetchSweeps = async () => {
+    try {
+      const response = await fetch(`/api/projects/${project.id}/sweeps`);
+      const data: ApiResponse<Sweep[]> = await response.json();
+      if (data.status !== "ok") {
+        throw new Error(data.message);
+      }
+      setSweeps(data.data.sort((a, b) => b.created_at - a.created_at));
+    } catch (error) {
+      console.error("Error fetching sweeps:", error);
+    }
+  };
+
   useEffect(() => {
     fetchResults();
-  }, [selectedSweep]);
+    fetchSweeps();
+    setNewName(sweep.name);
+  }, [sweep.id, project.id]);
 
   // Use the interval hook to periodically fetch data
   const REFRESH_INTERVAL = 5000;
   useInterval(
     () => {
+      fetchResults();
       fetchSweeps();
-      if (selectedSweep) {
-        fetchResults();
-      }
     },
     autoRefresh ? REFRESH_INTERVAL : null
   );
 
-  const handleDelete = async (
-    sweep: Sweep,
-    e: React.MouseEvent<HTMLElement>
-  ) => {
-    e.stopPropagation(); // Prevent sweep selection when clicking menu
-
-    if (!confirm(`Are you sure you want to delete sweep "${sweep.name}"?`)) {
-      return;
-    }
+  const handleRename = async () => {
+    if (!newName.trim()) return;
 
     try {
       const response = await fetch(`/api/sweeps/${sweep.id}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) throw new Error("Failed to delete sweep");
-
-      // Refresh sweeps list
-      await fetchSweeps();
-
-      // Clear selected sweep if it was the one we just deleted
-      if (selectedSweep?.id === sweep.id) {
-        setSelectedSweep(null);
-      }
-    } catch (error) {
-      console.error("Error deleting sweep:", error);
-    }
-  };
-
-  const handleRename = async () => {
-    if (!sweepToRename || !newName.trim()) return;
-
-    try {
-      const response = await fetch(`/api/sweeps/${sweepToRename.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -138,151 +114,112 @@ const SweepDashboard = () => {
 
       if (!response.ok) throw new Error("Failed to rename sweep");
 
-      // Refresh sweeps list
-      await fetchSweeps();
-
-      // Update selected sweep if it was the one renamed
-      if (selectedSweep?.id === sweepToRename.id) {
-        setSelectedSweep({ ...selectedSweep, name: newName.trim() });
-      }
-
       setRenameDialogOpen(false);
-      setSweepToRename(null);
-      setNewName("");
     } catch (error) {
       console.error("Error renaming sweep:", error);
     }
   };
 
-  const openRenameDialog = (sweep: Sweep, e: React.MouseEvent<HTMLElement>) => {
-    e.stopPropagation(); // Prevent sweep selection when clicking menu
-    setSweepToRename(sweep);
-    setNewName(sweep.name);
-    setRenameDialogOpen(true);
-  };
-
   return (
-    <div className="flex h-screen">
-      <Toaster richColors />
+    <div className="flex h-screen max-h-screen overflow-hidden">
       {/* Sidebar */}
-      <div className="w-64 bg-gray-100 p-4 border-r">
-        <h2 className="text-xl font-bold mb-4">Sweeps</h2>
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={autoRefresh}
-            onCheckedChange={setAutoRefresh}
-            id="auto-refresh"
-          />
-          <Label htmlFor="auto-refresh" className="text-sm">
-            Auto-refresh
-          </Label>
-        </div>
-        <div className="space-y-2">
-          {sweeps.map((sweep) => (
-            <div
-              key={sweep.id}
-              className={`flex items-center justify-between p-2 rounded cursor-pointer ${
-                selectedSweep?.id === sweep.id
-                  ? "bg-blue-500 text-white"
-                  : "hover:bg-gray-200"
-              }`}
-              onClick={() => setSelectedSweep(sweep)}
-            >
-              <span className="truncate mr-2">{sweep.name}</span>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  asChild
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={
-                      selectedSweep?.id === sweep.id
-                        ? "hover:bg-blue-600"
-                        : "hover:bg-gray-300"
-                    }
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem onClick={(e) => openRenameDialog(sweep, e)}>
-                    Rename
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="text-red-600"
-                    onClick={(e) => handleDelete(sweep, e)}
-                  >
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          ))}
+      <div className="w-64 bg-gray-100 border-r overflow-y-auto">
+        <div className="p-4">
+          <h2 className="text-xl font-bold mb-4">Sweeps</h2>
+          <div className="space-y-2">
+            {sweeps.map((s) => (
+              <div
+                key={s.id}
+                className={`flex items-center justify-between p-2 rounded cursor-pointer ${
+                  sweep.id === s.id
+                    ? "bg-blue-500 text-white"
+                    : "hover:bg-gray-200"
+                }`}
+                onClick={() => onSelectSweep(s)}
+              >
+                <span className="truncate mr-2">{s.name}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Main content */}
-      <div className="flex-1 p-4 overflow-auto">
-        {selectedSweep ? (
-          <>
-            <h1 className="text-2xl font-bold mb-4">
-              Sweep: {selectedSweep.name}
-            </h1>
-
-            <div className="flex gap-6 mb-6">
-              <BestTrialCard
-                results={results}
-                objective={selectedSweep.objective}
-                className="flex-0"
-              />
-
-              {/* Results Chart */}
-              <ProgressCard
-                results={results}
-                objective={selectedSweep.objective}
-                className="flex-1"
-              />
-            </div>
-
-            <SliceVisualizationCard
-              sweep={selectedSweep}
-              autoRefresh={autoRefresh}
-            />
-
-            {/* Results Table */}
-            <TrialListCard results={results} />
-          </>
-        ) : (
-          <div className="text-center text-gray-500 mt-10">
-            Select a sweep from the sidebar to view results
-          </div>
-        )}
-      </div>
-
-      {/* Rename Dialog */}
-      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename Sweep</DialogTitle>
-          </DialogHeader>
-          <Input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Enter new name"
+      <div className="flex-1 overflow-hidden flex flex-col">
+        <div className="bg-white border-b p-4 flex justify-between items-center">
+          <BreadcrumbNavigator
+            items={[
+              {
+                label: project.name,
+                onClick: onBackToProject,
+              },
+              {
+                label: sweep.name,
+                onClick: () => {}, // Already on this view
+              },
+            ]}
+            onHomeClick={onBackToProjects}
           />
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setRenameDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleRename}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                Actions <MoreVertical className="h-4 w-4 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => setRenameDialogOpen(true)}>
+                Rename
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        
+        <div className="p-6 overflow-auto">
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold">{sweep.name}</h1>
+          </div>
+
+        <div className="flex gap-6 mb-6">
+          <BestTrialCard
+            results={results}
+            objective={sweep.objective}
+            className="flex-0"
+          />
+
+          {/* Results Chart */}
+          <ProgressCard
+            results={results}
+            objective={sweep.objective}
+            className="flex-1"
+          />
+        </div>
+
+        <SliceVisualizationCard sweep={sweep} autoRefresh={autoRefresh} />
+
+        {/* Results Table */}
+        <TrialListCard results={results} />
+
+        {/* Rename Dialog */}
+        <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Rename Sweep</DialogTitle>
+            </DialogHeader>
+            <Input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Enter new name"
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleRename}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </div>
     </div>
   );
 };

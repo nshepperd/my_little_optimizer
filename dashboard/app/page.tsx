@@ -1,11 +1,11 @@
 'use client';
 
-import SweepDashboard from '@/components/SweepDashboard';
+import AppLayout from '@/components/AppLayout';
 
 export default function Home() {
   return (
     <main>
-      <SweepDashboard />
+      <AppLayout />
     </main>
   );
 }

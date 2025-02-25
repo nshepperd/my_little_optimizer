@@ -8,6 +8,13 @@ export interface SweepParameterType {
   log: boolean;
 }
 
+export interface Project {
+  id: string;
+  name: string;
+  created_at: number;
+  sweep_count: number;
+}
+
 export interface Sweep {
   id: string;
   name: string;
@@ -16,6 +23,8 @@ export interface Sweep {
   created_at: number;
   objective: OptimizationObjective;
   num_trials: number;
+  project_id?: string;
+  project_name?: string;
 }
 
 export interface TrialResult {
@@ -29,6 +38,10 @@ export interface TrialResult {
 }
 
 // Request/Response types
+export interface ProjectCreateRequest {
+  name: string;
+}
+
 export interface SweepCreateRequest {
   name: string;
   parameters: Array<{
@@ -38,6 +51,8 @@ export interface SweepCreateRequest {
     log?: boolean;
   }>;
   objective?: OptimizationObjective;
+  project_id?: string;
+  project_name?: string;
 }
 
 export interface SweepUpdateRequest {

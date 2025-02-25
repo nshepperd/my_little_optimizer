@@ -19,3 +19,8 @@ class SliceVisualization(BaseModel):
     param_name: str
     computed_at: int
     data: List[SliceVisualizationDatapoint]
+
+class Project(BaseModel):
+    id: str
+    name: str
+    created_at: int
