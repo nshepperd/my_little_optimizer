@@ -21,14 +21,32 @@ type ViewState =
   | { type: "project_sweeps"; project: Project }
   | { type: "sweep_dashboard"; project: Project; sweep: Sweep };
 
+// Local storage keys
+const STORAGE_KEY_THEME = "mlo-theme-preference";
+const STORAGE_KEY_AUTO_REFRESH = "mlo-auto-refresh";
+
 const AppLayout = () => {
   const [viewState, setViewState] = useState<ViewState>({ type: "projects" });
   const [autoRefresh, setAutoRefresh] = useState(false);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
-  // Avoid hydration mismatch
-  useEffect(() => setMounted(true), []);
+  // Initialize from local storage after component mounts
+  useEffect(() => {
+    setMounted(true);
+    
+    // Get theme preference
+    const savedTheme = localStorage.getItem(STORAGE_KEY_THEME);
+    if (savedTheme) {
+      setTheme(savedTheme);
+    }
+    
+    // Get auto-refresh preference
+    const savedAutoRefresh = localStorage.getItem(STORAGE_KEY_AUTO_REFRESH);
+    if (savedAutoRefresh !== null) {
+      setAutoRefresh(savedAutoRefresh === "true");
+    }
+  }, []);
 
   // Navigation handlers
   const navigateToProjects = () => {
@@ -43,9 +61,16 @@ const AppLayout = () => {
     setViewState({ type: "sweep_dashboard", project, sweep });
   };
 
-  // Toggle auto-refresh - this would be passed down to child components
+  // Toggle auto-refresh with local storage persistence
   const toggleAutoRefresh = (value: boolean) => {
     setAutoRefresh(value);
+    localStorage.setItem(STORAGE_KEY_AUTO_REFRESH, value.toString());
+  };
+
+  // Handle theme change with local storage persistence
+  const handleThemeChange = (newTheme: string) => {
+    setTheme(newTheme);
+    localStorage.setItem(STORAGE_KEY_THEME, newTheme);
   };
 
   // Render the appropriate view based on the state
@@ -100,7 +125,7 @@ const AppLayout = () => {
               {/* Theme Selector */}
               {mounted && (
                 <div className="flex items-center gap-2">
-                  <Select value={theme} onValueChange={setTheme}>
+                  <Select value={theme} onValueChange={handleThemeChange}>
                     <SelectTrigger className="w-[150px]">
                       <SelectValue placeholder="Theme" />
                     </SelectTrigger>
