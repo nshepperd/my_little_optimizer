@@ -5,8 +5,8 @@ from functools import partial
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from my_little_optimizer.opt.switchvec import switchvec
-from my_little_optimizer.opt.num import erfcx
+from my_little_optimizer_server.opt.switchvec import switchvec
+from my_little_optimizer_server.opt.num import erfcx
 
 def h(z):
     pdf = jax.scipy.stats.norm.pdf

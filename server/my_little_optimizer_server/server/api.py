@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Literal, TypeVar, Generic, Any
@@ -12,8 +13,8 @@ import threading
 from dataclasses import dataclass, asdict
 import time
 
-from my_little_optimizer.server.manager import SweepManager
-from my_little_optimizer.server.types import SweepSpaceItem, SliceVisualization, SliceVisualizationDatapoint
+from my_little_optimizer_server.server.manager import SweepManager
+from my_little_optimizer_server.server.types import SweepSpaceItem, SliceVisualization, SliceVisualizationDatapoint
 
 
 manager: SweepManager = None

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "my-little-optimizer-client"
+dynamic = ["version"]
+description = "A function-fitting bayesian optimization tool (client library)"
+authors = [
+    { name = "Emily Shepperd" }
+]
+license = { text = "MIT" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+]
+
+# Dependencies will be read from requirements.txt
+dependencies = ["requests"]
+
+[project.urls]
+Homepage = "https://github.com/nshepperd/my_little_optimizer"
+
+[tool.hatch.version]
+path = "my_little_optimizer_client/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["my_little_optimizer_client"]

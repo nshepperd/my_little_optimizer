@@ -50,7 +50,7 @@ const SweepDashboard = ({
   const fetchResults = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/sweeps/${sweep.id}/trials`);
+      const response = await fetch(`/api/sweeps/${sweep.id}/trials/`);
       const data: ApiResponse<TrialResult[]> = await response.json();
       if (data.status !== "ok") {
         throw new Error(data.message);

@@ -9,7 +9,7 @@ import einops
 import json
 import jax.scipy as jsp
 
-from my_little_optimizer.opt.gaussian_process import GP
+from my_little_optimizer_server.opt.gaussian_process import GP
 
 stuff = json.load(open('stuff.json', 'r'))
 xs = jnp.array(stuff['xs'])

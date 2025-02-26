@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "my-little-optimizer"
-dynamic = ["version"]
-description = "A function-fitting bayesian optimization tool"
+name = "my-little-optimizer-dev"
+version = "0.1.0"
+description = "Development environment for My Little Optimizer"
 readme = "README.md"
 authors = [
     { name = "Emily Shepperd" }
@@ -17,14 +17,41 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
 ]
 
-# Dependencies will be read from requirements.txt
-dependencies = ["fastapi[standard]", "jax", "optax", "matplotlib", "jax-tqdm", "eindex==0.1.0", "einops", "jaxtorch==0.5.0", "jaxopt", "requests", "cachetools"]
+# Dependencies for development only
+dependencies = [
+    "pytest",
+    "pytest-cov",
+    "black",
+    "isort",
+    "mypy",
+    "tox",
+]
+
+[project.optional-dependencies]
+# Allow easy installation of both packages during development
+all = [
+    "my-little-optimizer-client @ file://./client",
+    "my-little-optimizer-server @ file://./server",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest]
+testpaths = ["server/tests"]
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
 
 [project.urls]
 Homepage = "https://github.com/nshepperd/my_little_optimizer"
-
-[tool.hatch.version]
-path = "my_little_optimizer/_version.py"
-
-[tool.hatch.build.targets.wheel]
-packages = ["my_little_optimizer"]

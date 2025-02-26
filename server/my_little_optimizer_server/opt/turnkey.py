@@ -18,12 +18,12 @@ from jaxtorch import nn
 from jaxtorch import PRNG, Context
 import jaxtorch
 
-from my_little_optimizer.opt.log_h import log_h
-from my_little_optimizer.opt.metric import Metric, MetricEstimator, treeformat
-from my_little_optimizer.opt.nuts import nuts_kernel
-from my_little_optimizer.opt.adapt import warmup_with_dual_averaging, find_reasonable_epsilon
-from my_little_optimizer.opt.ahmc import ahmc_fast, sample_hmc
-from my_little_optimizer.util import Fn, Partial
+from my_little_optimizer_server.opt.log_h import log_h
+from my_little_optimizer_server.opt.metric import Metric, MetricEstimator, treeformat
+from my_little_optimizer_server.opt.nuts import nuts_kernel
+from my_little_optimizer_server.opt.adapt import warmup_with_dual_averaging, find_reasonable_epsilon
+from my_little_optimizer_server.opt.ahmc import ahmc_fast, sample_hmc
+from my_little_optimizer_server.util import Fn, Partial
 
 @jax.tree_util.register_static
 @dataclass

@@ -14,9 +14,9 @@ import traceback
 from cachetools import TTLCache
 import jax
 
-from my_little_optimizer.server.database import Database
-from my_little_optimizer.opt.optim import Optim, SpaceItem, Trial
-from my_little_optimizer.server.types import SweepSpaceItem, SliceVisualization, SliceVisualizationDatapoint
+from my_little_optimizer_server.server.database import Database
+from my_little_optimizer_server.opt.optim import Optim, SpaceItem, Trial
+from my_little_optimizer_server.server.types import SweepSpaceItem, SliceVisualization, SliceVisualizationDatapoint
 
 # class Task:
 #     id: str
@@ -62,9 +62,10 @@ class SweepManager:
     job_thread: Thread
     tasks: Dict[UUID, Task]
     viz_cache: TTLCache
+    pending_tasks: Dict[UUID, Task]
 
-    def __init__(self):
-        self.db = Database()
+    def __init__(self, db_path: str = 'sweeps.db'):
+        self.db = Database(db_path)
         init_db(self.db)
 
         with self.db.get_cursor() as c:
@@ -75,6 +76,7 @@ class SweepManager:
                 for (id, parameters, objective) in results
             }
 
+        self.pending_tasks = {}
         self.viz_cache = TTLCache(maxsize=100, ttl=60*60)
         self.job_queue = Queue()
         self.tasks = {}
@@ -94,9 +96,11 @@ class SweepManager:
 
     def job_worker(self):
         while True:
-            job = self.job_queue.get()
+            job: Task = self.job_queue.get()
             if job is None:
                 break
+            if job.id in self.pending_tasks:
+                del self.pending_tasks[job.id]
             print('Running job', job.id)
             try:
                 job()
@@ -109,6 +113,7 @@ class SweepManager:
     def schedule(self, task: Task):
         id = uuid.uuid4()
         task.id = id
+        self.pending_tasks[id] = task
         self.tasks[id] = task
         self.job_queue.put(task)
         print('Scheduled task', id, task)
@@ -221,6 +226,10 @@ class SweepManager:
                 (value, "complete", completed_at, sweep_id, trial_id),
             )
         self.sweeps[sweep_id].updated_at = int(time.time())
+        for task in self.pending_tasks.values():
+            if isinstance(task, InferTask) and task.sweep_id == sweep_id:
+                # Don't schedule if there's already one pending.
+                return
         self.schedule(InferTask(self, sweep_id))
     
     def ask_params(self, sweep_id: str, params: Dict[str, float]) -> UUID:

@@ -7,7 +7,12 @@ from dataclasses import dataclass, asdict
 import time
 import numpy as np
 
-from my_little_optimizer.opt.optim import SpaceItem
+@dataclass
+class SpaceItem:
+    name: str
+    min: float
+    max: float
+    log: bool = False
 
 def req(url, method, data=None):
     r = requests.request(method, url, json=data)
