@@ -53,12 +53,12 @@ const ProjectsView = ({ onSelectProject, autoRefresh }: ProjectsViewProps) => {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="bg-white border-b p-4 flex justify-between items-center">
+      <div className="bg-card border-b border-border p-4 flex justify-between items-center">
         <BreadcrumbNavigator items={[]} onHomeClick={() => {}} />
       </div>
       
-      <div className="container mx-auto p-6 overflow-auto">
-        <h1 className="text-3xl font-bold mb-6">Projects</h1>
+      <div className="container mx-auto p-6 overflow-auto bg-background">
+        <h1 className="text-3xl font-bold mb-6 text-foreground">Projects</h1>
 
       <Card>
         <CardHeader>
@@ -66,9 +66,9 @@ const ProjectsView = ({ onSelectProject, autoRefresh }: ProjectsViewProps) => {
         </CardHeader>
         <CardContent>
           {loading && projects.length === 0 ? (
-            <div className="text-center p-4">Loading projects...</div>
+            <div className="text-center p-4 text-foreground">Loading projects...</div>
           ) : projects.length === 0 ? (
-            <div className="text-center text-gray-500 p-4">
+            <div className="text-center text-muted-foreground p-4">
               No projects yet. Create a project by starting a sweep via the Python client.
             </div>
           ) : (
@@ -84,18 +84,18 @@ const ProjectsView = ({ onSelectProject, autoRefresh }: ProjectsViewProps) => {
                 {projects.map((project) => (
                   <TableRow
                     key={project.id}
-                    className="cursor-pointer hover:bg-gray-50"
+                    className="cursor-pointer hover:bg-accent"
                     onClick={() => onSelectProject(project)}
                   >
                     <TableCell className="font-medium">{project.name}</TableCell>
                     <TableCell>
                       <div className="flex items-center">
-                        <BarChart2 className="h-4 w-4 mr-2 text-blue-500" />
+                        <BarChart2 className="h-4 w-4 mr-2 text-primary" />
                         {project.sweep_count}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center text-gray-500">
+                      <div className="flex items-center text-muted-foreground">
                         <Calendar className="h-4 w-4 mr-2" />
                         {new Date(project.created_at * 1000).toLocaleDateString()}
                       </div>

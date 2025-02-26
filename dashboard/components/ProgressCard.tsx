@@ -28,7 +28,7 @@ const ProgressCard = ({ results, objective, className }: ProgressCardProps) => {
           <CardTitle>Optimization Progress</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-gray-500 text-sm">No results yet.</div>
+          <div className="text-muted-foreground text-sm">No results yet.</div>
         </CardContent>
       </Card>
     );
@@ -54,17 +54,19 @@ const ProgressCard = ({ results, objective, className }: ProgressCardProps) => {
         <CardTitle>Optimization Progress</CardTitle>
       </CardHeader>
       <CardContent className="gap-4 flex-1">
-        <div className="mb-2">{bestTrials.length} trials so far.</div>
+        <div className="mb-2 text-foreground">{bestTrials.length} trials so far.</div>
         <ResponsiveContainer minWidth={200} width="100%" height="80%">
           <ComposedChart
             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
             data={bestTrials}
           >
-            <CartesianGrid strokeDasharray="3 3" />
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis
               dataKey="trial_number"
               type="number"
-              label={{ value: "Trial Number", position: "bottom" }}
+              label={{ value: "Trial Number", position: "bottom", fill: "hsl(var(--foreground))" }}
+              tick={{ fill: "hsl(var(--foreground))" }}
+              axisLine={{ stroke: "hsl(var(--border))" }}
             />
             <YAxis
               dataKey="value"
@@ -72,26 +74,41 @@ const ProgressCard = ({ results, objective, className }: ProgressCardProps) => {
                 value: "Value",
                 angle: -90,
                 position: "insideLeft",
+                fill: "hsl(var(--foreground))"
               }}
               domain={["auto", "auto"]}
+              tick={{ fill: "hsl(var(--foreground))" }}
+              axisLine={{ stroke: "hsl(var(--border))" }}
             />
-            <Tooltip animationDuration={0} />
+            <Tooltip
+              contentStyle={{ 
+                backgroundColor: "hsl(var(--card))", 
+                borderColor: "hsl(var(--border))",
+                color: "hsl(var(--card-foreground))" 
+              }}
+              labelStyle={{ color: "hsl(var(--card-foreground))" }}
+              itemStyle={{ color: "hsl(var(--card-foreground))" }}
+              animationDuration={0} 
+            />
             <Line
               name="Best so far"
               type="stepAfter"
               dataKey="best_value"
               key="best"
-              stroke="#2563eb"
+              stroke="hsl(var(--chart-1))"
               dot={false}
               isAnimationActive={false}
+              strokeWidth={2}
             />
             <Scatter
               name="Trial results"
               dataKey="value"
               key="results"
-              fill="#6366f1"
+              fill="hsl(var(--chart-1))"
               isAnimationActive={false}
-              stroke="#8884d8"
+              stroke="hsl(var(--chart-1))"
+              fillOpacity={0.2}
+              strokeOpacity={0.2}
             />
           </ComposedChart>
         </ResponsiveContainer>

@@ -53,7 +53,7 @@ const ProjectSweepsView = ({
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="bg-white border-b p-4 flex justify-between items-center">
+      <div className="bg-card border-b border-border p-4 flex justify-between items-center">
         <BreadcrumbNavigator
           items={[
             {
@@ -65,10 +65,10 @@ const ProjectSweepsView = ({
         />
       </div>
       
-      <div className="container mx-auto p-6 overflow-auto">
+      <div className="container mx-auto p-6 overflow-auto bg-background">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">{project.name}</h1>
-          <div className="text-sm text-gray-500">
+          <h1 className="text-3xl font-bold text-foreground">{project.name}</h1>
+          <div className="text-sm text-muted-foreground">
             Created {new Date(project.created_at * 1000).toLocaleString()}
           </div>
         </div>
@@ -79,9 +79,9 @@ const ProjectSweepsView = ({
         </CardHeader>
         <CardContent>
           {loading && sweeps.length === 0 ? (
-            <div className="text-center p-4">Loading sweeps...</div>
+            <div className="text-center p-4 text-foreground">Loading sweeps...</div>
           ) : sweeps.length === 0 ? (
-            <div className="text-center text-gray-500 p-4">
+            <div className="text-center text-muted-foreground p-4">
               No sweeps in this project yet.
             </div>
           ) : (
@@ -99,29 +99,29 @@ const ProjectSweepsView = ({
                 {sweeps.map((sweep) => (
                   <TableRow
                     key={sweep.id}
-                    className="cursor-pointer hover:bg-gray-50"
+                    className="cursor-pointer hover:bg-accent"
                     onClick={() => onSelectSweep(sweep)}
                   >
                     <TableCell className="font-medium">{sweep.name}</TableCell>
                     <TableCell>
                       <div className="flex items-center">
-                        <BarChart2 className="h-4 w-4 mr-2 text-blue-500" />
+                        <BarChart2 className="h-4 w-4 mr-2 text-primary" />
                         {sweep.num_trials}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center">
-                        <Activity className="h-4 w-4 mr-2 text-green-500" />
+                        <Activity className="h-4 w-4 mr-2 text-primary" />
                         {sweep.objective === "min" ? "Minimize" : "Maximize"}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
+                      <span className="px-2 py-1 rounded-full text-xs bg-primary/20 text-primary">
                         {sweep.status}
                       </span>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center text-gray-500">
+                      <div className="flex items-center text-muted-foreground">
                         <Calendar className="h-4 w-4 mr-2" />
                         {new Date(sweep.created_at * 1000).toLocaleDateString()}
                       </div>

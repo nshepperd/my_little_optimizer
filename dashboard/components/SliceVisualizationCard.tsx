@@ -179,15 +179,15 @@ const SliceVisualizationCard = ({
       );
       opttable = (
         <div className="relative mt-4 pt-1 text-xs">
-          <div className="absolute -top-1 left-2 px-1 bg-white text-xs text-gray-700">
+          <div className="absolute -top-1 left-2 px-1 bg-card text-xs text-muted-foreground">
             Optimal Params
           </div>
-          <div className="border rounded p-2 pt-1">
+          <div className="border border-border rounded p-2 pt-1">
             <table className="w-full">
               <tbody>
                 {other_params.map(([k, v]) => (
                   <tr key={k}>
-                    <td className="pr-3 text-gray-600">{k}:</td>
+                    <td className="pr-3 text-muted-foreground">{k}:</td>
                     <td className="text-right font-mono">{v.toFixed(4)}</td>
                   </tr>
                 ))}
@@ -199,22 +199,17 @@ const SliceVisualizationCard = ({
     }
 
     return (
-      <div className="bg-white p-3 border rounded-md shadow-md">
-        <p className="font-medium text-gray-800 mb-2">
+      <div className="bg-card p-3 border border-border rounded-md shadow-md">
+        <p className="font-medium text-foreground mb-2">
           {selectedParam}: {d.x.toFixed(4)}
         </p>
-        <div className="text-gray-600 mb-3">
+        <div className="text-muted-foreground mb-3">
           <p>Mean: {d.y_mean.toFixed(4)}</p>
           <p>Std Dev: {d.y_std.toFixed(4)}</p>
         </div>
         {opttable}
       </div>
     );
-
-    // newPayload = newPayload.map((x) => {
-    //     console.log(x.payload);
-    //     return x; });
-    // return <Tooltip payload={newPayload} {...rest} />;
   };
 
   return (
@@ -223,12 +218,12 @@ const SliceVisualizationCard = ({
         <div className="flex justify-between">
           <CardTitle>Parameter Slice Visualization</CardTitle>
           {(loading || jobId) && (
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-muted-foreground">
               {jobId ? "Computing..." : "Loading..."}
             </div>
           )}
           {error && (
-            <div className="flex items-center justify-center text-red-500">
+            <div className="flex items-center justify-center text-destructive">
               {error}
             </div>
           )}
@@ -256,12 +251,18 @@ const SliceVisualizationCard = ({
                   <ComposedChart
                     margin={{ top: 5, right: 30, left: 20, bottom: 20 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis
                       dataKey="x"
                       type="number"
                       domain={["auto", "auto"]}
-                      label={{ value: selectedParam, position: "bottom" }}
+                      label={{ 
+                        value: selectedParam, 
+                        position: "bottom", 
+                        fill: "hsl(var(--foreground))" 
+                      }}
+                      tick={{ fill: "hsl(var(--foreground))" }}
+                      axisLine={{ stroke: "hsl(var(--border))" }}
                       scale={
                         sweep.parameters[selectedParam].log ? "log" : "linear"
                       }
@@ -304,8 +305,11 @@ const SliceVisualizationCard = ({
                         value: "Value",
                         angle: -90,
                         position: "insideLeft",
+                        fill: "hsl(var(--foreground))"
                       }}
                       domain={["auto", "auto"]}
+                      tick={{ fill: "hsl(var(--foreground))" }}
+                      axisLine={{ stroke: "hsl(var(--border))" }}
                     />
                     <Tooltip
                       content={renderTooltipWithoutRange}
@@ -322,7 +326,7 @@ const SliceVisualizationCard = ({
                       dataKey="a"
                       stroke="none"
                       fillOpacity={0.1}
-                      fill="#2563eb"
+                      fill="hsl(var(--chart-1))"
                       activeDot={false}
                       isAnimationActive={false}
                     />
@@ -337,7 +341,7 @@ const SliceVisualizationCard = ({
                       dataKey="a"
                       stroke="none"
                       fillOpacity={0.1}
-                      fill="#2563eb"
+                      fill="hsl(var(--chart-1))"
                       activeDot={false}
                       isAnimationActive={false}
                     />
@@ -352,7 +356,7 @@ const SliceVisualizationCard = ({
                       dataKey="a"
                       stroke="none"
                       fillOpacity={0.1}
-                      fill="#2563eb"
+                      fill="hsl(var(--chart-1))"
                       activeDot={false}
                       isAnimationActive={false}
                     />
@@ -362,14 +366,14 @@ const SliceVisualizationCard = ({
                       name="Mean prediction"
                       data={visualization.data}
                       dataKey="y_mean"
-                      stroke="#2563eb"
+                      stroke="hsl(var(--chart-1))"
                       dot={false}
                       isAnimationActive={false}
                     />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
-              <div className="text-sm text-gray-500 mt-2">
+              <div className="text-sm text-muted-foreground mt-2">
                 Last computed:{" "}
                 {new Date(visualization.computed_at * 1000).toLocaleString()}
               </div>

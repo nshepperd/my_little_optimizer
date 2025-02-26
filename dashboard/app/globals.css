@@ -34,32 +34,118 @@ body {
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
   }
-  .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+  [data-theme='pastel-light'] {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221 83% 53%;
+    
+    /* Chart colors - soft pastels */
+    --chart-1: 221 83% 53%; /* Blue */
+    --chart-2: 340 82% 52%; /* Pink */
+    --chart-3: 130 62% 45%; /* Green */
+    --chart-4: 50 94% 58%;  /* Yellow */
+    --chart-5: 275 80% 66%; /* Purple */
   }
+  [data-theme='sandy-light'] {
+    --background: 35 25% 97%;
+    --foreground: 20 25% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 20 25% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 25% 12%;
+    --primary: 22 75% 42%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 35 25% 94%;
+    --secondary-foreground: 20 25% 12%;
+    --muted: 35 25% 94%;
+    --muted-foreground: 20 25% 45%;
+    --accent: 35 25% 94%;
+    --accent-foreground: 20 25% 12%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 35 25% 88%;
+    --input: 35 25% 88%;
+    --ring: 22 75% 42%;
+    
+    /* Chart colors - warm palette */
+    --chart-1: 22 75% 42%;  /* Rust/Sienna */
+    --chart-2: 40 96% 48%;  /* Golden */
+    --chart-3: 10 85% 49%;  /* Orange-red */
+    --chart-4: 200 75% 45%; /* Blue (contrast) */
+    --chart-5: 100 40% 50%; /* Muted green */
+  }
+  [data-theme='dark'] {
+    --background: 230 25% 10%; /* Deep blue-gray */
+    --foreground: 210 40% 98%;
+    --card: 230 25% 12%;
+    --card-foreground: 210 40% 98%;
+    --popover: 230 25% 12%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%; /* Vibrant blue */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 230 25% 16%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 230 25% 16%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 230 25% 18%;
+    --input: 230 25% 18%;
+    --ring: 224 76% 48%;
+    
+    /* Chart colors - scientific palette */
+    --chart-1: 217 91% 60%; /* Blue */
+    --chart-2: 276 91% 60%; /* Purple */
+    --chart-3: 188 86% 53%; /* Cyan */
+    --chart-4: 150 86% 53%; /* Green */
+    --chart-5: 47 95% 55%;  /* Yellow */
+  }
+  [data-theme='eco-dark'] {
+      --background: 210 30% 8%;
+      --foreground: 210 20% 98%;
+      --card: 210 30% 10%;
+      --card-foreground: 210 20% 98%;
+      --popover: 210 30% 10%;
+      --popover-foreground: 210 20% 98%;
+      --primary: 142 71% 45%; /* Vibrant green */
+      --primary-foreground: 210 20% 98%;
+      --secondary: 210 30% 15%;
+      --secondary-foreground: 210 20% 98%;
+      --muted: 210 30% 15%;
+      --muted-foreground: 210 20% 70%;
+      --accent: 142 71% 45%;
+      --accent-foreground: 210 20% 98%;
+      --destructive: 0 84% 60%;
+      --destructive-foreground: 210 20% 98%;
+      --border: 210 30% 14%;
+      --input: 210 30% 14%;
+      --ring: 142 71% 45%;
+      
+      /* Energy efficient chart colors */
+      --chart-1: 142 71% 45%; /* Green */
+      --chart-2: 190 95% 39%; /* Cyan */
+      --chart-3: 160 84% 39%; /* Sea green */
+      --chart-4: 130 60% 39%; /* Forest green */
+      --chart-5: 210 100% 56%; /* Blue */
+    }
 }
 
 @layer base {

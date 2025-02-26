@@ -46,7 +46,7 @@ const BestTrialCard = ({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-gray-500 text-sm">No results yet.</div>
+          <div className="text-muted-foreground text-sm">No results yet.</div>
         </CardContent>
       </Card>
     );
@@ -60,7 +60,6 @@ const BestTrialCard = ({
   };
 
   // Calculate duration
-  //   assert(bestTrial.completed_at !== null);
   assert(bestTrial.completed_at !== null);
   const startTime = Instant.ofEpochSecond(bestTrial.created_at);
   const endTime = Instant.ofEpochSecond(bestTrial.completed_at);
@@ -100,27 +99,29 @@ const BestTrialCard = ({
       <CardContent>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="text-sm text-gray-500">Trial #</p>
-            <p className="font-medium">{results.indexOf(bestTrial) + 1}</p>
+            <p className="text-sm text-muted-foreground">Trial #</p>
+            <p className="font-medium">
+              {results.indexOf(bestTrial) + 1}
+            </p>
           </div>
           <div>
-            <p className="text-sm text-gray-500">Value</p>
+            <p className="text-sm text-muted-foreground">Value</p>
             <p className="font-medium">{bestTrial.value.toFixed(4)}</p>
           </div>
           <div>
-            <p className="text-sm text-gray-500">Start Time</p>
+            <p className="text-sm text-muted-foreground">Start Time</p>
             <p className="font-medium">{startTime.toLocaleString()}</p>
           </div>
           <div>
-            <p className="text-sm text-gray-500">Duration</p>
+            <p className="text-sm text-muted-foreground">Duration</p>
             <p className="font-medium flex items-center gap-2">
               <Clock className="h-4 w-4" />
               {formatDuration(duration)}
             </p>
           </div>
           <div className="col-span-2">
-            <p className="text-sm text-gray-500 mb-2">Parameters</p>
-            <div className="bg-gray-50 p-3 rounded-md">
+            <p className="text-sm text-muted-foreground mb-2">Parameters</p>
+            <div className="bg-muted p-3 rounded-md">
               {Object.entries(bestTrial.parameters).map(([key, value]) => (
                 <div key={key} className="flex justify-between">
                   <span className="font-mono text-sm">{key}:</span>

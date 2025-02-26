@@ -123,17 +123,17 @@ const SweepDashboard = ({
   return (
     <div className="flex h-screen max-h-screen overflow-hidden">
       {/* Sidebar */}
-      <div className="w-64 bg-gray-100 border-r overflow-y-auto">
+      <div className="w-64 bg-muted border-r border-border overflow-y-auto">
         <div className="p-4">
-          <h2 className="text-xl font-bold mb-4">Sweeps</h2>
+          <h2 className="text-xl font-bold mb-4 text-foreground">Sweeps</h2>
           <div className="space-y-2">
             {sweeps.map((s) => (
               <div
                 key={s.id}
                 className={`flex items-center justify-between p-2 rounded cursor-pointer ${
                   sweep.id === s.id
-                    ? "bg-blue-500 text-white"
-                    : "hover:bg-gray-200"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-accent hover:text-accent-foreground"
                 }`}
                 onClick={() => onSelectSweep(s)}
               >
@@ -146,7 +146,7 @@ const SweepDashboard = ({
 
       {/* Main content */}
       <div className="flex-1 overflow-hidden flex flex-col">
-        <div className="bg-white border-b p-4 flex justify-between items-center">
+        <div className="bg-card border-b border-border p-4 flex justify-between items-center">
           <BreadcrumbNavigator
             items={[
               {
@@ -176,7 +176,7 @@ const SweepDashboard = ({
         
         <div className="p-6 overflow-auto">
           <div className="mb-6">
-            <h1 className="text-2xl font-bold">{sweep.name}</h1>
+            <h1 className="text-2xl font-bold text-foreground">{sweep.name}</h1>
           </div>
 
         <div className="flex gap-6 mb-6">

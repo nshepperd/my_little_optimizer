@@ -19,7 +19,7 @@ const BreadcrumbNavigator = ({ items, onHomeClick, className = "" }: BreadcrumbN
       <Button
         variant="ghost" 
         size="sm"
-        className="flex items-center text-gray-600 hover:text-gray-900"
+        className="flex items-center text-muted-foreground hover:text-foreground"
         onClick={onHomeClick}
       >
         <Home className="h-4 w-4 mr-1" />
@@ -28,11 +28,11 @@ const BreadcrumbNavigator = ({ items, onHomeClick, className = "" }: BreadcrumbN
       
       {items.map((item, index) => (
         <React.Fragment key={index}>
-          <ChevronRight className="h-4 w-4 text-gray-400" />
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
           <Button
             variant="ghost"
             size="sm"
-            className="flex items-center text-gray-600 hover:text-gray-900"
+            className="flex items-center text-muted-foreground hover:text-foreground"
             onClick={item.onClick}
           >
             {item.label}
