@@ -75,15 +75,15 @@ const SliceVisualizationCard = ({
 
       if (result.status === "ok") {
         const resp = result.data;
-        if (resp.cached) {
-          if (
+        if (resp.cached &&
             resp.cached.sweep_id === sweep.id &&
             resp.cached.param_name === selectedParam
           ) {
             setVisualization(resp.cached);
             setLoading(false);
+          } else {
+            setVisualization(null);
           }
-        }
         if (resp.job_id) {
           setJobId(resp.job_id);
         }
