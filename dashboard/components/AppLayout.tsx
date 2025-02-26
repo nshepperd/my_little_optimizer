@@ -110,6 +110,7 @@ const AppLayout = () => {
   const themes = [
     { id: 'light', name: 'Light' },
     { id: 'pastel-light', name: 'Pastel Light' },
+    { id: 'pink-light', name: 'Pink Light' },
     { id: 'sandy-light', name: 'Sandy Light' },
     { id: 'dark', name: 'Dark' },
     { id: 'eco-dark', name: 'Eco-Dark' }

@@ -62,6 +62,34 @@ body {
     --chart-4: 50 94% 58%;  /* Yellow */
     --chart-5: 275 80% 66%; /* Purple */
   }
+  [data-theme='pink-light'] {
+    --background: 350 30% 99%;  /* Very light pink background */
+    --foreground: 340 40% 20%;  /* Deep pink-mauve for text */
+    --card: 0 0% 100%;          /* Pure white cards */
+    --card-foreground: 340 40% 20%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 340 40% 20%;
+    --primary: 338 75% 64%;     /* Medium pink */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 350 30% 96%;   /* Very light pink secondary */
+    --secondary-foreground: 340 40% 25%;
+    --muted: 350 30% 94%;
+    --muted-foreground: 340 35% 45%;
+    --accent: 350 30% 94%;
+    --accent-foreground: 340 40% 25%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 350 30% 88%;      /* Light pink borders */
+    --input: 350 30% 88%;
+    --ring: 338 75% 64%;
+    
+    /* Chart colors - cherry blossom palette */
+    --chart-1: 338 75% 64%;     /* Medium pink */
+    --chart-2: 338 80% 50%;     /* Darker pink */
+    --chart-3: 350 95% 85%;     /* Light pink */
+    --chart-4: 15 80% 65%;      /* Soft coral */
+    --chart-5: 290 50% 65%;     /* Soft lavender */
+  }
   [data-theme='sandy-light'] {
     --background: 35 25% 97%;
     --foreground: 20 25% 12%;
