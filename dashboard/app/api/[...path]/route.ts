@@ -5,7 +5,7 @@ const handler = async (req: Request) => {
     const url = new URL(req.url);
     const path = url.pathname.replace('/api/', '');
     
-    const response = await fetch(`http://localhost:8000/api/${path}`, {
+    const response = await fetch(`http://localhost:37356/api/${path}`, {
       method: req.method,
       headers: {
         'Content-Type': 'application/json',

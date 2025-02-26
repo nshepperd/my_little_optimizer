@@ -6,7 +6,7 @@ from .config import settings
 def main():
     parser = argparse.ArgumentParser(description="My Little Optimizer Server")
     parser.add_argument("--host", default="127.0.0.1", help="Host to bind server to")
-    parser.add_argument("--port", type=int, default=8000, help="Port to bind server to")
+    parser.add_argument("--port", type=int, default=37356, help="Port to bind server to")
     parser.add_argument("--db-path", default=settings.db_path, help="SQLite database path")
     parser.add_argument("--dev", action="store_true", help="Enable auto-reload (development mode)")
     
