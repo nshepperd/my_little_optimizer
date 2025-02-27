@@ -264,11 +264,11 @@ const SliceVisualizationCard = ({
                       tick={{ fill: "hsl(var(--foreground))" }}
                       axisLine={{ stroke: "hsl(var(--border))" }}
                       scale={
-                        sweep.parameters[selectedParam].log ? "log" : "linear"
+                        sweep.parameters[selectedParam].type === "log" ? "log" : "linear"
                       }
                       ticks={(() => {
                         // Only generate custom ticks for log scale
-                        if (!sweep.parameters[selectedParam]?.log)
+                        if (sweep.parameters[selectedParam]?.type !== "log")
                           return undefined;
 
                         // Get parameter range

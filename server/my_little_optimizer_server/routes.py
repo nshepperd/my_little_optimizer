@@ -9,7 +9,7 @@ from datetime import datetime
 from uuid import UUID
 from dataclasses import dataclass, asdict
 
-from my_little_optimizer_server.server.types import SweepSpaceItem, SliceVisualization, SliceVisualizationDatapoint
+from my_little_optimizer_server.server.types import SweepParamType, SweepSpaceItem, SliceVisualization, SliceVisualizationDatapoint
 from my_little_optimizer_server.server.manager import SweepManager
 
 # Models
@@ -32,15 +32,11 @@ class ApiResponse(BaseModel, Generic[T]):
 
 class SweepCreate(BaseModel):
     name: str
-    parameters: List[SweepSpaceItem]
+    parameters: Dict[str, SweepParamType]
     objective: Literal['min', 'max'] = 'min'
     project_id: Optional[str] = None
     project_name: Optional[str] = None
 
-class SweepParamType(BaseModel):
-    min: float
-    max: float
-    log: bool
 
 class SweepGetResponse(BaseModel):
     id: str
@@ -136,7 +132,7 @@ def register_routes(app: FastAPI):
                 res.append(SweepGetResponse(
                     id=r['id'],
                     name=r['name'],
-                    parameters={p['name']: SweepParamType(min=p['min'], max=p['max'], log=p['log']) for p in json.loads(r['parameters'])},
+                    parameters=json.loads(r['parameters']),
                     status=r['status'],
                     created_at=r['created_at'],
                     objective=r['objective'],
@@ -222,7 +218,7 @@ def register_routes(app: FastAPI):
             return ApiResponse.ok(SweepGetResponse(
                 id=results[0]['id'],
                 name=results[0]['name'],
-                parameters={p['name']: SweepParamType(min=p['min'], max=p['max'], log=p['log']) for p in json.loads(results[0]['parameters'])},
+                parameters=json.loads(results[0]['parameters']),
                 status=results[0]['status'],
                 created_at=results[0]['created_at'],
                 objective=results[0]['objective'],
@@ -294,7 +290,7 @@ def register_routes(app: FastAPI):
                 res.append(SweepGetResponse(
                     id=r['id'],
                     name=r['name'],
-                    parameters={p['name']: SweepParamType(min=p['min'], max=p['max'], log=p['log']) for p in json.loads(r['parameters'])},
+                    parameters=json.loads(r['parameters']),
                     status=r['status'],
                     created_at=r['created_at'],
                     objective=r['objective'],

@@ -24,3 +24,11 @@ class Project(BaseModel):
     id: str
     name: str
     created_at: int
+
+class SweepParamType(BaseModel):
+    min: float
+    max: float
+    type: Literal['linear', 'log', 'logit']
+
+    def todict(self):
+        return {'min': self.min, 'max': self.max, 'type': self.type}

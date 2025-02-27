@@ -15,8 +15,8 @@ from cachetools import TTLCache
 import jax
 
 from my_little_optimizer_server.server.database import Database
-from my_little_optimizer_server.opt.optim import Optim, SpaceItem, Trial
-from my_little_optimizer_server.server.types import SweepSpaceItem, SliceVisualization, SliceVisualizationDatapoint
+from my_little_optimizer_server.opt.optim import Optim, Space, SpaceItem, LinearSpace, LogSpace, LogitSpace, Trial
+from my_little_optimizer_server.server.types import SweepParamType, SweepSpaceItem, SliceVisualization, SliceVisualizationDatapoint
 
 # class Task:
 #     id: str
@@ -32,10 +32,16 @@ from my_little_optimizer_server.server.types import SweepSpaceItem, SliceVisuali
 def todict(xs):
     if isinstance(xs, list):
         return [todict(x) for x in xs]
+    elif isinstance(xs, dict):
+        return {k: todict(v) for k,v in xs.items()}
     elif isinstance(xs, BaseModel):
         return xs.__dict__
     else:
-        return asdict(xs)
+        try:
+            return asdict(xs)
+        except TypeError:
+            return xs
+
 
 @dataclass
 class SweepInfo:
@@ -55,6 +61,30 @@ class TrialInfo:
     created_at: int
     completed_at: Optional[int]
 
+def mkspace(params: Dict[str, Dict[str, Any]] | Dict[str, SweepParamType]) -> Space:
+    params = todict(params)
+    space = {}
+    for name, param in params.items():
+        if param['type'] == 'linear':
+            space[name] = LinearSpace(param['min'], param['max'])
+        elif param['type'] == 'log':
+            space[name] = LogSpace(param['min'], param['max'])
+        elif param['type'] == 'logit':
+            space[name] = LogitSpace(param['min'], param['max'])
+        else:
+            raise ValueError(f'Unknown parameter type {param["type"]}')
+    return Space(space)
+
+def migrate(db: Database):
+    with db.get_cursor() as c:
+        c.execute("SELECT id, parameters, objective FROM sweeps")
+        results = c.fetchall()
+        for (id, parameters, objective) in results:
+            parameters = json.loads(parameters)
+            if isinstance(parameters, list):
+                parameters = {p['name']: {'min': p['min'], 'max': p['max'], 'type': 'log' if p.get('log',False) else 'linear'} for p in parameters}
+                c.execute("UPDATE sweeps SET parameters = ? WHERE id = ?", (json.dumps(parameters), id))
+
 class SweepManager:
     sweeps: Dict[str, SweepInfo]
     db: Database
@@ -68,11 +98,13 @@ class SweepManager:
         self.db = Database(db_path)
         init_db(self.db)
 
+        migrate(self.db)
+
         with self.db.get_cursor() as c:
             c.execute("SELECT id, parameters, objective FROM sweeps")
             results = c.fetchall()
             self.sweeps = {id:
-                SweepInfo(id=id, optim=Optim([SpaceItem(**p) for p in json.loads(parameters)], objective=objective), trials={})
+                SweepInfo(id=id, optim=Optim(mkspace(json.loads(parameters)), objective=objective), trials={})
                 for (id, parameters, objective) in results
             }
 
@@ -147,7 +179,7 @@ class SweepManager:
             result = c.fetchone()
             return result['id'] if result else None
     
-    def create_sweep(self, name: str, parameters: List[SweepSpaceItem], objective: Literal['min', 'max'] = 'min', project_id: str = None):
+    def create_sweep(self, name: str, parameters: Dict[str, SweepParamType], objective: Literal['min', 'max'] = 'min', project_id: str = None):
         sweep_id = str(uuid.uuid4())
 
         with self.db.get_cursor() as c:
@@ -164,7 +196,7 @@ class SweepManager:
                 ),
             )
         
-        self.sweeps[sweep_id] = SweepInfo(id=sweep_id, optim=Optim([SpaceItem(**todict(p)) for p in parameters], objective=objective), trials={})
+        self.sweeps[sweep_id] = SweepInfo(id=sweep_id, optim=Optim(mkspace(parameters), objective=objective), trials={})
 
         return sweep_id
 
@@ -314,7 +346,7 @@ class SliceVisualizationTask(Task):
         param = space.items[self.param_name]
         xs = param.linspace(100)
         def pred(x):
-            params = sweep.optim.suggestbest({param.name: x}, method='cma-es')
+            params = sweep.optim.suggestbest({self.param_name: x}, method='cma-es')
             mean, std = sweep.optim.fitted.predict(space.normalize(params)[None])
             return mean.squeeze(), std.squeeze(), params
         means, stds, params = jax.vmap(pred)(xs)

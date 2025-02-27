@@ -5,7 +5,7 @@ export type OptimizationObjective = 'min' | 'max';
 export interface SweepParameterType {
   min: number;
   max: number;
-  log: boolean;
+  type: 'linear' | 'log' | 'logit';
 }
 
 export interface Project {
@@ -44,11 +44,10 @@ export interface ProjectCreateRequest {
 
 export interface SweepCreateRequest {
   name: string;
-  parameters: Array<{
-    name: string;
+  parameters: Record<string, {
     min: number;
     max: number;
-    log?: boolean;
+    type: 'linear' | 'log' | 'logit';
   }>;
   objective?: OptimizationObjective;
   project_id?: string;

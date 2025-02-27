@@ -2,17 +2,16 @@ from __future__ import annotations
 
 import requests
 import json
-from typing import List, Dict
+from typing import List, Dict, Literal
 from dataclasses import dataclass, asdict
 import time
 import numpy as np
 
 @dataclass
 class SpaceItem:
-    name: str
     min: float
     max: float
-    log: bool = False
+    type: Literal['linear', 'log', 'logit'] = 'linear'
 
 def req(url, method, data=None):
     r = requests.request(method, url, json=data)
@@ -41,13 +40,20 @@ class OptimClient:
         assert r['status'] == 'ok'
         return ProjectHandle(self, r['data'])
 
-    def new_sweep(self, name: str, parameters: List[SpaceItem], objective='min', project_id=None, project_name=None):
+    def new_sweep(self, name: str, parameters: Dict[str, SpaceItem], objective='min', project_id=None, project_name=None):
         if not project_id and not project_name:
             raise ValueError("Either project_id or project_name must be provided")
-            
+        
+        for (key, value) in parameters.items():
+            if value.type == 'log':
+                assert value.min > 0, f'Log parameter {key} must have min > 0'
+            elif value.type == 'logit':
+                assert value.min > 0, f'Logit parameter {key} must have min > 0'
+                assert value.max < 1, f'Logit parameter {key} must have max < 1'
+
         data = {
             "name": name,
-            "parameters": [asdict(p) for p in parameters],
+            "parameters": {k: asdict(v) for k,v in parameters.items()},
             "objective": objective,
         }
         
@@ -72,7 +78,7 @@ class ProjectHandle:
         assert r['status'] == 'ok'
         return [SweepHandle(self.client, sweep['id']) for sweep in r['data']]
     
-    def new_sweep(self, name: str, parameters: List[SpaceItem], objective='min'):
+    def new_sweep(self, name: str, parameters: Dict[str, SpaceItem], objective='min'):
         return self.client.new_sweep(name, parameters, objective, project_id=self.id)
     
 @dataclass
@@ -135,10 +141,9 @@ class TrialHandle:
 
 if __name__ == '__main__':
     client = OptimClient('http://localhost:8000')
-    sweep = client.new_sweep('test_xy_complex', [SpaceItem('x', -1, 1),
-                                                SpaceItem('y', -1, 1)
-                                                ], objective='min',
-                                                project_name='test')
+    sweep = client.new_sweep('test_xy_complex', {'x': SpaceItem(-1, 1), 
+                                                 'y': SpaceItem(-1, 1)}, 
+                             objective='min', project_name='test')
     print('id:', sweep.id)
     # sweep = client.get_sweep('test_random_y')
     for i in range(20):

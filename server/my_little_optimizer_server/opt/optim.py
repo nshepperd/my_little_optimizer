@@ -3,6 +3,7 @@ sys.path.append('.')
 
 import jax
 import jax.numpy as jnp
+import jax.scipy as jsp
 import optax
 import numpy as np
 import math
@@ -12,7 +13,7 @@ from functools import partial
 from jax.tree_util import tree_map
 from dataclasses import dataclass
 import eindex.array_api as EX
-from typing import List, Dict, Tuple, Protocol, Callable
+from typing import Any, List, Dict, Tuple, Protocol, Callable, Sequence
 import einops
 
 from jaxtorch import nn
@@ -26,44 +27,80 @@ from my_little_optimizer_server.util import Partial
 from my_little_optimizer_server.opt.turnkey import sample_adaptive
 from my_little_optimizer_server.opt.ahmc import ahmc_fast
 
-@dataclass
 class SpaceItem:
-    name: str
     min: float
     max: float
-    log: bool = False
+
+    def normalize(self, x: jax.Array) -> jax.Array: ...
+    
+    def denormalize(self, x: jax.Array) -> jax.Array: ...
+    
+    def linspace(self, n):
+        return self.denormalize(jnp.linspace(0.0, 1.0, n))
+
+    def random(self, key, shape):
+        return self.denormalize(jax.random.uniform(key, shape, minval=0.0, maxval=1.0))
+
+class LinearSpace(SpaceItem):
+    def __init__(self, min: float, max: float):
+        self.min = min
+        self.max = max
 
     def normalize(self, x):
         x = jnp.asarray(x)
-        if self.log:
-            x = jnp.log(x)
-            return (x - jnp.log(self.min)) / (jnp.log(self.max) - jnp.log(self.min))
         return (x - self.min) / (self.max - self.min)
+
+    def denormalize(self, x):
+        x = jnp.asarray(x)
+        return x * (self.max - self.min) + self.min
+
+class LogSpace(SpaceItem):
+    def __init__(self, min: float, max: float):
+        self.min = min
+        self.max = max
+
+    def normalize(self, x):
+        x = jnp.asarray(x)
+        return (jnp.log(x) - jnp.log(self.min)) / (jnp.log(self.max) - jnp.log(self.min))
+
+    def denormalize(self, x):
+        x = jnp.asarray(x)
+        return jnp.exp(x * (jnp.log(self.max) - jnp.log(self.min)) + jnp.log(self.min))
+
+class LogitSpace(SpaceItem):
+    def __init__(self, min: float, max: float):
+        self.min = min
+        self.max = max
+
+    def normalize(self, x):
+        x = jnp.asarray(x)
+        return (jsp.special.logit(x) - jsp.special.logit(self.min)) / (jsp.special.logit(self.max) - jsp.special.logit(self.min))
     
     def denormalize(self, x):
         x = jnp.asarray(x)
-        if self.log:
-            return jnp.exp(x * (jnp.log(self.max) - jnp.log(self.min)) + jnp.log(self.min))
-        return x * (self.max - self.min) + self.min
-    
-    def linspace(self, n):
-        return self.denormalize(jnp.linspace(self.normalize(self.min), self.normalize(self.max), n))
+        return jsp.special.expit(x * (jsp.special.logit(self.max) - jsp.special.logit(self.min)) + jsp.special.logit(self.min))
 
-
-@dataclass
 class Space:
     keys: List[str]
     items: Dict[str, SpaceItem]
     n: int
 
+    def __init__(self, items: Dict[str, SpaceItem]):
+        self.keys = list(items.keys())
+        self.items = items
+        self.n = len(self.keys)
+
     def __getitem__(self, key):
         return self.items[key]
 
-    def normalize(self, params):
+    def normalize(self, params: Dict[str, Any]):
         return jnp.stack([self.items[k].normalize(params[k]) for k in self.keys], axis=-1)
     
     def denormalize(self, array: jax.Array):
         return {k:self.items[k].denormalize(array[..., i]) for i,k in enumerate(self.keys)}
+    
+    def random(self, key: jax.Array, shape: Sequence[int]=()):
+        return {k:self.items[k].random(key, shape) for k in self.keys}
 
 @dataclass
 class Trial:
@@ -158,8 +195,8 @@ class Optim:
     space: Space
     trials: List[Trial]
 
-    def __init__(self, space: List[SpaceItem], objective='min', heuristic='lcb'):
-        self.space = Space(keys=[item.name for item in space], items={item.name: item for item in space}, n=len(space))
+    def __init__(self, space: Space, objective='min', heuristic='lcb'):
+        self.space = space
         self.trials = []
         self.in_dim = len(self.space.keys)
         self.model = MLPWithNoise(nn.Sequential([nn.Linear(self.in_dim, 10), nn.Tanh(), nn.Linear(10, 1)]))
@@ -220,8 +257,8 @@ class Optim:
     def suggest(self, params, method = 'cma-es'):
         if self.fitted is None:
             # just choose random points
-            v = jax.random.uniform(self.rng.split(), [self.space.n], minval=0.0, maxval=1.0)
-            ret = self.space.denormalize(v)
+            # v = jax.random.uniform(self.rng.split(), [self.space.n], minval=0.0, maxval=1.0)
+            ret = self.space.random(self.rng.split(), [])
             ret.update(params)
             return ret
 
