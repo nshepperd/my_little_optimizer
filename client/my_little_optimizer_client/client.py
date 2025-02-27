@@ -18,6 +18,7 @@ def req(url, method, data=None):
     while r.status_code != 200:
         print(f'Error {method}ing {url}, retrying: {r.status_code} {r.text}')
         time.sleep(1)
+        r = requests.request(method, url, json=data)
     return r
 
 class OptimClient:
